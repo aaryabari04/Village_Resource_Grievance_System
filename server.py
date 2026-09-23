@@ -934,6 +934,12 @@ class VillageAppHandler(BaseHTTPRequestHandler):
         print(f"[{self.log_date_time_string()}] {self.command} {self.path} -> {args[0]}")
 
 
+def app(environ, start_response):
+    """Expose the Vercel WSGI adapter when this module is used as the entrypoint."""
+    from api.index import app as vercel_app
+    return vercel_app(environ, start_response)
+
+
 def run_server(host: str = config.HOST, port: int = config.PORT):
     """Starts the threaded HTTP server."""
     # Ensure database is initialized before starting

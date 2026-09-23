@@ -70,6 +70,9 @@ Village_Resource_Grievance_System/
 ├── README.md                   # Complete documentation and setup guide
 ├── setup_database.py           # Database initialisation and realistic seeding script
 ├── test_backend.py             # Unittest test suite for backend, DB, queues, and search
+├── vercel.json                 # Vercel routing and Python function configuration
+├── api/
+│   └── index.py                # Vercel WSGI adapter for the existing Python server
 │
 ├── data_structures/            # Core Data Structures Layer
 │   ├── __init__.py
@@ -194,9 +197,39 @@ Open your browser (Chrome, Edge, Firefox) and navigate to:
 http://localhost:8000
 ```
 
+## Deploying to Vercel
+
+This repository includes `vercel.json` and `api/index.py` so the existing Python
+HTTP handler can run as a Vercel Python function.
+
+### Deploy from GitHub
+
+1. Push this repository to GitHub.
+2. Open [vercel.com](https://vercel.com) and select **Add New Project**.
+3. Import the GitHub repository.
+4. Keep the project root as the repository root.
+5. Click **Deploy**. No build command or environment variable is required for the demo.
+
+### Deploy with the Vercel CLI
+
+```bash
+npm install -g vercel
+vercel login
+vercel
+vercel --prod
+```
+
+### Vercel limitations
+
+- SQLite is initialized in `/tmp`, which is temporary storage. Data can be lost when
+   the serverless function is restarted or moved to another instance.
+- Sessions are stored in memory and are not shared between function instances.
+- For a real production deployment, move the database to a hosted database such as
+   PostgreSQL and store sessions in a shared service such as Redis.
+
 ---
 
-## 🔑 9. Demo Login Credentials
+## 🔑 10. Demo Login Credentials
 
 For testing and presentation evaluation, the following demo accounts are pre-configured:
 
@@ -222,7 +255,7 @@ For testing and presentation evaluation, the following demo accounts are pre-con
 
 ---
 
-## 🧪 10. Automated Testing
+## 🧪 11. Automated Testing
 
 To run the automated backend test suite covering database schema, password hashing, authentication, FIFO Queue, Min-Heap Priority Queue, searching, and sorting:
 
@@ -238,7 +271,7 @@ OK
 
 ---
 
-## 🔄 11. Grievance Redressal Lifecycle
+## 🔄 12. Grievance Redressal Lifecycle
 
 ```
 Villager Files Complaint
@@ -265,7 +298,7 @@ Issue Resolved & Confirmed -> Status: "Resolved"
 
 ---
 
-## 🛠️ 12. Troubleshooting & FAQ
+## 🛠️ 13. Troubleshooting & FAQ
 
 - **Port 8000 already in use?**
   You can modify `PORT = 8000` in `config.py` to another port such as `8080` or `5000`.
