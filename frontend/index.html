@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Village Resources & Grievance Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-brand">
+        <img src="/assets/images/logo.svg" alt="Emblem" width="32" height="32">
+        <span>GramSeva</span>
+      </a>
+
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html" class="active" data-i18n="nav_home">Home</a></li>
+        <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
+        <li><a href="grievance.html" data-i18n="nav_grievance">Report Grievance</a></li>
+        <li><a href="track.html" data-i18n="nav_track">Track Grievance</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <!-- Multilingual Dropdown -->
+        <select id="lang-select" class="lang-select" aria-label="Select Language">
+          <option value="en">English</option>
+          <option value="mr">मराठी</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+
+        <div id="nav-auth-actions">
+          <a href="login.html" class="btn btn-sm btn-outline-primary" data-i18n="nav_login">Login</a>
+          <a href="register.html" class="btn btn-sm btn-primary" data-i18n="nav_register">Register</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <span class="hero-pill" data-i18n="hero_pill">Digital Village Governance Platform</span>
+      <h1 class="hero-title" data-i18n="hero_title">Village Resources &amp; Grievance Management System</h1>
+      <p class="hero-subtitle" data-i18n="hero_subtitle">Connecting Villagers with Essential Resources and Faster Grievance Management</p>
+      <div class="hero-actions">
+        <a href="resources.html" class="btn btn-lg btn-accent" data-i18n="btn_explore_resources">Explore Resources</a>
+        <a href="grievance.html" class="btn btn-lg btn-primary" style="background-color: #ffffff; color: var(--primary-dark);" data-i18n="btn_report_grievance">Report a Grievance</a>
+        <a href="track.html" class="btn btn-lg btn-outline" style="border-color: rgba(255,255,255,0.4); color: #fff;" data-i18n="nav_track">Track Grievance</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Metrics Banner -->
+  <div class="container" style="margin-top: -2rem;">
+    <div class="stats-grid" id="public-stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon green">&#127968;</div>
+        <div>
+          <div class="stat-value" id="stat-resources-count">8</div>
+          <div class="stat-label">Active Village Resources</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">&#128221;</div>
+        <div>
+          <div class="stat-value" id="stat-grievances-count">5</div>
+          <div class="stat-label">Grievances Registered</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon teal">&#9989;</div>
+        <div>
+          <div class="stat-value" id="stat-resolved-count">92%</div>
+          <div class="stat-label">Resolution Rate</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon amber">&#9889;</div>
+        <div>
+          <div class="stat-value">24-48h</div>
+          <div class="stat-label">Emergency Response Time</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key Features -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title" data-i18n="features_title">Key Platform Services</h2>
+      <p class="section-subtitle" data-i18n="features_subtitle">Empowering rural communities with accessible digital services and responsive administration.</p>
+
+      <div class="grid-3">
+        <div class="feature-box">
+          <div class="feature-icon">&#128167;</div>
+          <h3 style="font-size: 1.25rem; font-weight:700; margin-bottom: 0.5rem;">Resource Directory</h3>
+          <p style="color: var(--text-muted); font-size: 0.95rem;">
+            Instant access to contacts, operational hours, and availability for health centers, schools, water supply points, and public offices.
+          </p>
+          <a href="resources.html" style="display:inline-block; margin-top: 1rem; font-weight:600;">Browse Directory &rarr;</a>
+        </div>
+
+        <div class="feature-box">
+          <div class="feature-icon">&#128227;</div>
+          <h3 style="font-size: 1.25rem; font-weight:700; margin-bottom: 0.5rem;">Grievance Redressal</h3>
+          <p style="color: var(--text-muted); font-size: 0.95rem;">
+            Submit complaints directly to Gram Panchayat administration with photo evidence, categories, and automated priority queue processing.
+          </p>
+          <a href="grievance.html" style="display:inline-block; margin-top: 1rem; font-weight:600;">Submit Grievance &rarr;</a>
+        </div>
+
+        <div class="feature-box">
+          <div class="feature-icon">&#128269;</div>
+          <h3 style="font-size: 1.25rem; font-weight:700; margin-bottom: 0.5rem;">Real-Time Tracking</h3>
+          <p style="color: var(--text-muted); font-size: 0.95rem;">
+            Track progress transparently from submission, field verification, department assignment to final resolution with official timestamps.
+          </p>
+          <a href="track.html" style="display:inline-block; margin-top: 1rem; font-weight:600;">Track Status &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section class="section" style="background-color: var(--surface);">
+    <div class="container">
+      <h2 class="section-title">How The System Works</h2>
+      <p class="section-subtitle">A transparent, data-structure powered grievance lifecycle built for rapid rural governance.</p>
+
+      <div class="grid-3" style="text-align: center;">
+        <div class="card" style="border:none; box-shadow:none;">
+          <div style="width: 60px; height: 60px; background: var(--primary-light); color: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; margin: 0 auto 1rem auto;">1</div>
+          <h4 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem;">Villager Submits Complaint</h4>
+          <p style="font-size: 0.9rem; color: var(--text-muted);">
+            Resident submits issue details, category, and urgency level. System assigns unique tracking code (e.g. GRV-2026-0001).
+          </p>
+        </div>
+
+        <div class="card" style="border:none; box-shadow:none;">
+          <div style="width: 60px; height: 60px; background: var(--warning-light); color: var(--warning); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; margin: 0 auto 1rem auto;">2</div>
+          <h4 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem;">Priority Queue Triage</h4>
+          <p style="font-size: 0.9rem; color: var(--text-muted);">
+            Emergency and high priority issues (burst water mains, electrical faults) automatically bubble to top using Python Min-Heap algorithms.
+          </p>
+        </div>
+
+        <div class="card" style="border:none; box-shadow:none;">
+          <div style="width: 60px; height: 60px; background: var(--success-light); color: var(--success); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; margin: 0 auto 1rem auto;">3</div>
+          <h4 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem;">Department Resolution</h4>
+          <p style="font-size: 0.9rem; color: var(--text-muted);">
+            Panchayat assigns specialized department (Water, Electricity, Health). Progress is updated live in the resident's tracking timeline.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Village Services Directory Preview -->
+  <section class="section">
+    <div class="container">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
+        <div>
+          <h2 class="section-title" style="text-align:left; margin-bottom:0.25rem;">Village Services &amp; Facilities</h2>
+          <p style="color:var(--text-muted); font-size:0.95rem;">Key government infrastructure and emergency contacts available in the village.</p>
+        </div>
+        <a href="resources.html" class="btn btn-outline-primary">View All Resources &rarr;</a>
+      </div>
+
+      <div class="grid-3" id="home-resources-preview">
+        <!-- Populated via Javascript -->
+      </div>
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section class="section">
+    <div class="container">
+      <div class="card" style="padding: 2.5rem; background: linear-gradient(to right, #ffffff, #f8fafc);">
+        <h2 style="font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary-dark);">About GramSeva Platform</h2>
+        <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.7;">
+          The Village Resources and Grievance Management System is an institutional capstone project developed to eliminate procedural delays and lack of transparency in rural civic administration. By integrating modern web interfaces with Python core data structures (Heap-based Priority Queue, FIFO Queue, Multi-attribute Search &amp; Sort) and SQLite database persistence, GramSeva ensures that every citizen's voice is heard and acted upon according to urgency.
+        </p>
+        <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:1.5rem;">
+          <div><strong>Architecture:</strong> Python HTTP + SQLite + Vanilla JS</div>
+          <div><strong>Algorithms:</strong> Min-Heap Triage &amp; FIFO Queue</div>
+          <div><strong>Languages:</strong> English, मराठी, हिन्दी</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <div>
+        <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+          <img src="/assets/images/logo.svg" alt="Emblem" width="24" height="24">
+          <strong style="color:#ffffff; font-size:1.1rem;">GramSeva System</strong>
+        </div>
+        <p>Village Resources and Grievance Management System &bull; College Capstone Project</p>
+      </div>
+
+      <div class="footer-links">
+        <a href="index.html" data-i18n="nav_home">Home</a>
+        <a href="resources.html" data-i18n="nav_resources">Resources</a>
+        <a href="grievance.html" data-i18n="nav_grievance">Grievance</a>
+        <a href="track.html" data-i18n="nav_track">Track</a>
+        <a href="admin.html" data-i18n="nav_admin">Admin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/script.js"></script>
+  <script>
+    // Load home page previews
+    document.addEventListener("DOMContentLoaded", async () => {
+      // 1. Fetch top resources preview
+      try {
+        const res = await fetch("/api/resources");
+        const data = await res.json();
+        if (data.success && data.resources) {
+          const container = document.getElementById("home-resources-preview");
+          const top3 = data.resources.slice(0, 3);
+          container.innerHTML = top3.map(r => `
+            <div class="resource-card">
+              <div class="resource-header">
+                <span class="resource-name">${escapeHtml(r.name)}</span>
+                <span class="badge" style="background:#e0f2fe; color:#0284c7;">${escapeHtml(r.category)}</span>
+              </div>
+              <p class="resource-desc">${escapeHtml(r.description)}</p>
+              <div class="resource-meta">
+                <div><strong>Location:</strong> ${escapeHtml(r.location || "Central Village")}</div>
+                <div><strong>Contact:</strong> ${escapeHtml(r.contact || "Panchayat Bhavan")}</div>
+                <div><strong>Hours:</strong> ${escapeHtml(r.availability || "Standard Hours")}</div>
+              </div>
+            </div>
+          `).join("");
+
+          document.getElementById("stat-resources-count").textContent = data.resources.length;
+        }
+      } catch (e) {
+        console.error("Failed to load resources preview:", e);
+      }
+
+    });
+  </script>
+</body>
+</html>

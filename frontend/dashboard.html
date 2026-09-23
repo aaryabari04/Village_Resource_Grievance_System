@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Villager Dashboard - Village Resources & Grievance Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-brand">
+        <img src="/assets/images/logo.svg" alt="Emblem" width="32" height="32">
+        <span>GramSeva</span>
+      </a>
+
+      <button class="nav-toggle" id="nav-toggle">&#9776;</button>
+
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html" data-i18n="nav_home">Home</a></li>
+        <li><a href="dashboard.html" class="active" data-i18n="nav_dashboard">Dashboard</a></li>
+        <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
+        <li><a href="grievance.html" data-i18n="nav_grievance">Report Grievance</a></li>
+        <li><a href="track.html" data-i18n="nav_track">Track Grievance</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <select id="lang-select" class="lang-select">
+          <option value="en">English</option>
+          <option value="mr">मराठी</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+        <div id="nav-auth-actions"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Dashboard Main Content -->
+  <main class="container">
+    <!-- Header with Welcome Greeting -->
+    <div class="page-header">
+      <div>
+        <h1 class="page-title" id="welcome-title">Welcome, Villager</h1>
+        <p class="page-subtitle" id="welcome-subtitle">Village Resident Citizen Portal &bull; Gram Panchayat Sundarpur</p>
+      </div>
+      <div style="display:flex; gap:0.75rem;">
+        <a href="grievance.html" class="btn btn-primary">
+          <span>&#10010;</span> <span data-i18n="nav_grievance">Report Grievance</span>
+        </a>
+        <a href="resources.html" class="btn btn-outline">
+          <span>&#128269;</span> <span data-i18n="nav_resources">Search Resources</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Metrics Cards Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue">&#128203;</div>
+        <div>
+          <div class="stat-value" id="count-total">0</div>
+          <div class="stat-label">Total Filed</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon amber">&#9203;</div>
+        <div>
+          <div class="stat-value" id="count-pending">0</div>
+          <div class="stat-label">Pending / Verification</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon teal">&#9881;</div>
+        <div>
+          <div class="stat-value" id="count-inprogress">0</div>
+          <div class="stat-label">In Progress</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon green">&#9989;</div>
+        <div>
+          <div class="stat-value" id="count-resolved">0</div>
+          <div class="stat-label">Resolved</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Actions Banner -->
+    <div class="card" style="background: linear-gradient(135deg, #eaf5ed 0%, #f1f5f9 100%); border-left: 5px solid var(--primary); margin-bottom: 2rem;">
+      <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem;">Quick Citizen Actions</h3>
+      <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Need to report an urgent village pipeline leak, faulty streetlights, or request a public health checkup?
+      </p>
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+        <a href="grievance.html" class="btn btn-sm btn-primary">Submit New Grievance</a>
+        <a href="track.html" class="btn btn-sm btn-outline-primary">Track by Code</a>
+        <a href="resources.html" class="btn btn-sm btn-outline">Find Water / Health / School</a>
+      </div>
+    </div>
+
+    <!-- Recent Grievances -->
+    <div class="card">
+      <div class="card-title">
+        <span>My Registered Grievances</span>
+        <a href="grievance.html" class="btn btn-sm btn-outline-primary">+ New</a>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Subject</th>
+              <th>Category</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="user-grievance-tbody">
+            <tr>
+              <td colspan="7" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+                Loading your grievances...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      // 1. Check user authentication
+      try {
+        const res = await fetch("/api/session");
+        const data = await res.json();
+        if (!data.authenticated || !data.user) {
+          window.location.href = "login.html";
+          return;
+        }
+
+        const u = data.user;
+        document.getElementById("welcome-title").textContent = `Namaste, ${u.full_name}!`;
+        document.getElementById("welcome-subtitle").textContent = `Village Resident &bull; ${u.village} (${u.mobile})`;
+
+        // Load user's grievances
+        loadUserGrievances();
+      } catch (e) {
+        console.error("Dashboard init error:", e);
+      }
+    });
+
+    async function loadUserGrievances() {
+      const tbody = document.getElementById("user-grievance-tbody");
+      try {
+        const res = await fetch("/api/grievances/user");
+        const data = await res.json();
+
+        if (data.success && data.grievances) {
+          const grvs = data.grievances;
+
+          // Compute stats
+          const total = grvs.length;
+          const pending = grvs.filter(g => ["Submitted", "Verified", "Assigned"].includes(g.status)).length;
+          const inprog = grvs.filter(g => g.status === "In Progress").length;
+          const resolved = grvs.filter(g => g.status === "Resolved").length;
+
+          document.getElementById("count-total").textContent = total;
+          document.getElementById("count-pending").textContent = pending;
+          document.getElementById("count-inprogress").textContent = inprog;
+          document.getElementById("count-resolved").textContent = resolved;
+
+          if (grvs.length === 0) {
+            tbody.innerHTML = `
+              <tr>
+                <td colspan="7" style="text-align:center; padding: 2rem; color: var(--text-muted);">
+                  You have not submitted any grievances yet.
+                  <div style="margin-top: 0.5rem;"><a href="grievance.html" class="btn btn-sm btn-primary">Submit a Grievance</a></div>
+                </td>
+              </tr>
+            `;
+            return;
+          }
+
+          tbody.innerHTML = grvs.map(g => `
+            <tr>
+              <td><a href="track.html?code=${encodeURIComponent(g.grievance_code)}" style="font-weight:700;">${escapeHtml(g.grievance_code)}</a></td>
+              <td><strong>${escapeHtml(g.subject)}</strong></td>
+              <td>${escapeHtml(g.category)}</td>
+              <td>${getPriorityBadge(g.priority)}</td>
+              <td>${getStatusBadge(g.status)}</td>
+              <td style="font-size:0.8rem; color:var(--text-muted);">${formatDate(g.created_at)}</td>
+              <td>
+                <a href="track.html?code=${encodeURIComponent(g.grievance_code)}" class="btn btn-sm btn-outline-primary">Track</a>
+              </td>
+            </tr>
+          `).join("");
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--danger); padding:1rem;">Failed to load grievances.</td></tr>`;
+      }
+    }
+
+  </script>
+</body>
+</html>

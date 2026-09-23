@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Village Resources Directory - Village System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-brand">
+        <img src="/assets/images/logo.svg" alt="Emblem" width="32" height="32">
+        <span>GramSeva</span>
+      </a>
+
+      <button class="nav-toggle" id="nav-toggle">&#9776;</button>
+
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html" data-i18n="nav_home">Home</a></li>
+        <li><a href="resources.html" class="active" data-i18n="nav_resources">Resources</a></li>
+        <li><a href="grievance.html" data-i18n="nav_grievance">Report Grievance</a></li>
+        <li><a href="track.html" data-i18n="nav_track">Track Grievance</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <select id="lang-select" class="lang-select">
+          <option value="en">English</option>
+          <option value="mr">मराठी</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+        <div id="nav-auth-actions"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Resources Explorer -->
+  <main class="container">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title" data-i18n="nav_resources">Village Resources &amp; Public Facilities</h1>
+        <p class="page-subtitle">Directory of health clinics, schools, public utilities, transportation, and government centers.</p>
+      </div>
+    </div>
+
+    <!-- Search & Filtering Bar -->
+    <div class="card" style="padding: 1.25rem;">
+      <div style="display:flex; gap:0.75rem; margin-bottom: 1rem; flex-wrap:wrap;">
+        <input type="text" id="resource-search-input" class="form-control" style="flex:1; min-width:260px;" placeholder="Search by name, facility type, or location (e.g. clinic, water, school)..." data-i18n="search_placeholder">
+        <button type="button" class="btn btn-primary" onclick="triggerSearch()">
+          <span>&#128269;</span> Search
+        </button>
+        <button type="button" class="btn btn-outline" onclick="resetFilters()">
+          Reset
+        </button>
+      </div>
+
+      <!-- Category Filter Pills -->
+      <div class="filter-bar" id="category-pills">
+        <button class="filter-pill active" onclick="filterCategory('All', this)">All Facilities</button>
+        <button class="filter-pill" onclick="filterCategory('Health', this)">Health &amp; Clinics</button>
+        <button class="filter-pill" onclick="filterCategory('Education', this)">Education &amp; Library</button>
+        <button class="filter-pill" onclick="filterCategory('Utilities', this)">Water &amp; Power</button>
+        <button class="filter-pill" onclick="filterCategory('Administration', this)">Gram Panchayat Office</button>
+        <button class="filter-pill" onclick="filterCategory('Public Facility', this)">Community Halls</button>
+        <button class="filter-pill" onclick="filterCategory('Transport', this)">Bus &amp; Transit</button>
+      </div>
+    </div>
+
+    <!-- Results Status Info -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; font-size:0.9rem; color:var(--text-muted);">
+      <span id="results-count-text">Showing resources...</span>
+      <span id="search-algorithm-badge" style="font-size:0.75rem; background:var(--primary-light); color:var(--primary-dark); padding:0.2rem 0.5rem; border-radius:var(--radius-sm); font-weight:600;">
+        Powered by Python Search Algorithms
+      </span>
+    </div>
+
+    <!-- Grid of Resource Cards -->
+    <div id="resources-grid" class="grid-3">
+      <!-- Injected via JavaScript -->
+    </div>
+  </main>
+
+  <!-- Resource Detail Modal -->
+  <div class="modal-backdrop" id="resource-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-res-name">Resource Name</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:1rem;">
+          <span class="badge badge-assigned" id="modal-res-cat">Category</span>
+        </div>
+        <p id="modal-res-desc" style="color:var(--text-muted); font-size:0.95rem; margin-bottom:1.25rem; line-height:1.6;"></p>
+
+        <div style="background:var(--surface-alt); padding:1rem; border-radius:var(--radius-md); font-size:0.9rem; display:flex; flex-direction:column; gap:0.6rem;">
+          <div><strong>&#128205; Location:</strong> <span id="modal-res-location"></span></div>
+          <div><strong>&#128222; Official Contact:</strong> <span id="modal-res-contact"></span></div>
+          <div><strong>&#128337; Operational Hours:</strong> <span id="modal-res-avail"></span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a href="grievance.html" class="btn btn-primary btn-sm">Report Issue with this Facility</a>
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/script.js"></script>
+  <script>
+    let allResourcesList = [];
+    let selectedCategory = "All";
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadResources();
+
+      // Enter key in search box
+      document.getElementById("resource-search-input").addEventListener("keyup", (e) => {
+        if (e.key === "Enter") {
+          triggerSearch();
+        }
+      });
+    });
+
+    async function loadResources() {
+      const grid = document.getElementById("resources-grid");
+      grid.innerHTML = "<div style='grid-column:1/-1; text-align:center; padding:3rem; color:var(--text-muted);'>Loading village resources catalog...</div>";
+
+      try {
+        const res = await fetch("/api/resources");
+        const data = await res.json();
+        if (data.success && data.resources) {
+          allResourcesList = data.resources;
+          renderResources(allResourcesList);
+        }
+      } catch (e) {
+        grid.innerHTML = "<div style='grid-column:1/-1; text-align:center; color:var(--danger);'>Failed to load resources from backend server.</div>";
+      }
+    }
+
+    async function triggerSearch() {
+      const query = document.getElementById("resource-search-input").value.trim();
+      const grid = document.getElementById("resources-grid");
+
+      if (!query) {
+        renderResources(allResourcesList);
+        return;
+      }
+
+      grid.innerHTML = "<div style='grid-column:1/-1; text-align:center; padding:2rem;'>Searching resources using Python search algorithm...</div>";
+
+      try {
+        // Calls backend endpoint /api/resources/search?q= which runs search_resources in search_sort.py
+        const res = await fetch(`/api/resources/search?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        if (data.success && data.resources) {
+          renderResources(data.resources, `Search results for "${query}"`);
+        }
+      } catch (err) {
+        showToast("Error executing search", "error");
+      }
+    }
+
+    function filterCategory(cat, btn) {
+      selectedCategory = cat;
+      document.querySelectorAll(".filter-pill").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+
+      if (cat === "All") {
+        renderResources(allResourcesList);
+      } else {
+        const filtered = allResourcesList.filter(r => r.category.toLowerCase() === cat.toLowerCase());
+        renderResources(filtered, `Category: ${cat}`);
+      }
+    }
+
+    function resetFilters() {
+      document.getElementById("resource-search-input").value = "";
+      selectedCategory = "All";
+      document.querySelectorAll(".filter-pill").forEach((p, idx) => {
+        if (idx === 0) p.classList.add("active");
+        else p.classList.remove("active");
+      });
+      renderResources(allResourcesList);
+    }
+
+    function renderResources(items, filterLabel = "") {
+      const grid = document.getElementById("resources-grid");
+      const countEl = document.getElementById("results-count-text");
+
+      countEl.textContent = `Showing ${items.length} ${items.length === 1 ? 'facility' : 'facilities'} ${filterLabel ? '(' + filterLabel + ')' : ''}`;
+
+      if (items.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1/-1; text-align:center; padding: 3rem; background: var(--surface); border-radius: var(--radius-lg); border: 1px dashed var(--border);">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">&#128269;</div>
+            <h3 style="font-size: 1.2rem; font-weight:700;">No matching resources found</h3>
+            <p style="color:var(--text-muted); margin-bottom: 1rem;">Try adjusting your keywords or clearing category filters.</p>
+            <button class="btn btn-sm btn-primary" onclick="resetFilters()">View All Resources</button>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = items.map(r => `
+        <div class="resource-card">
+          <div>
+            <div class="resource-header">
+              <h3 class="resource-name">${escapeHtml(r.name)}</h3>
+              <span class="badge" style="background:#e0f2fe; color:#0369a1;">${escapeHtml(r.category)}</span>
+            </div>
+            <p class="resource-desc">${escapeHtml(r.description)}</p>
+          </div>
+
+          <div class="resource-meta">
+            <div><strong>&#128205; Location:</strong> ${escapeHtml(r.location || "Panchayat Ward")}</div>
+            <div><strong>&#128222; Contact:</strong> ${escapeHtml(r.contact || "Gram Panchayat")}</div>
+            <div><strong>&#128337; Hours:</strong> ${escapeHtml(r.availability || "Standard Hours")}</div>
+            <div style="margin-top:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+              <button class="btn btn-sm btn-outline-primary" onclick="openModal(${r.id})">View Details</button>
+              <a href="grievance.html?category=${encodeURIComponent(r.category)}" class="btn btn-sm btn-outline" style="font-size:0.75rem;">Report Issue</a>
+            </div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function openModal(id) {
+      const r = allResourcesList.find(x => x.id === id);
+      if (!r) return;
+
+      document.getElementById("modal-res-name").textContent = r.name;
+      document.getElementById("modal-res-cat").textContent = r.category;
+      document.getElementById("modal-res-desc").textContent = r.description;
+      document.getElementById("modal-res-location").textContent = r.location || "Panchayat Center";
+      document.getElementById("modal-res-contact").textContent = r.contact || "Contact Panchayat Bhavan";
+      document.getElementById("modal-res-avail").textContent = r.availability || "General Public Hours";
+
+      document.getElementById("resource-modal").classList.add("open");
+    }
+
+    function closeModal() {
+      document.getElementById("resource-modal").classList.remove("open");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Portal - Village Resources & Grievance Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* Admin navigation tabs */
+    .admin-tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 2px solid var(--border-light);
+      margin-bottom: 1.5rem;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .admin-tab {
+      padding: 0.6rem 1.2rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      transition: var(--transition);
+      white-space: nowrap;
+      font-size: 0.95rem;
+    }
+    .admin-tab:hover {
+      color: var(--primary);
+      background-color: var(--primary-light);
+    }
+    .admin-tab.active {
+      color: var(--primary);
+      background-color: var(--surface);
+      border-bottom: 3px solid var(--primary);
+      box-shadow: var(--shadow-sm);
+    }
+    .tab-pane {
+      display: none;
+    }
+    .tab-pane.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-brand">
+        <img src="/assets/images/logo.svg" alt="Emblem" width="32" height="32">
+        <span>GramSeva Admin</span>
+      </a>
+
+      <button class="nav-toggle" id="nav-toggle">&#9776;</button>
+
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html" data-i18n="nav_home">Home</a></li>
+        <li><a href="admin.html" class="active" data-i18n="nav_admin">Admin Portal</a></li>
+        <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
+        <li><a href="track.html" data-i18n="nav_track">Track Grievance</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <select id="lang-select" class="lang-select">
+          <option value="en">English</option>
+          <option value="mr">मराठी</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+        <div id="nav-auth-actions"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Admin Workspace -->
+  <main class="container">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Gram Panchayat Administration Console</h1>
+        <p class="page-subtitle">Centralized queue triage, departmental workflows, resource directory &amp; civic analytics.</p>
+      </div>
+      <div id="admin-user-tag" style="font-size:0.85rem; font-weight:600; color:var(--text-muted);"></div>
+    </div>
+
+    <!-- Statistics Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon green">&#128101;</div>
+        <div>
+          <div class="stat-value" id="admin-stat-users">0</div>
+          <div class="stat-label">Registered Villagers</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon blue">&#128221;</div>
+        <div>
+          <div class="stat-value" id="admin-stat-grievances">0</div>
+          <div class="stat-label">Total Grievances</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon amber">&#9203;</div>
+        <div>
+          <div class="stat-value" id="admin-stat-pending">0</div>
+          <div class="stat-label">Pending / Verification</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon teal">&#9881;</div>
+        <div>
+          <div class="stat-value" id="admin-stat-inprogress">0</div>
+          <div class="stat-label">In Progress</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon green">&#9989;</div>
+        <div>
+          <div class="stat-value" id="admin-stat-resolved">0</div>
+          <div class="stat-label">Resolved Issues</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon red">&#9888;</div>
+        <div>
+          <div class="stat-value" id="admin-stat-high">0</div>
+          <div class="stat-label">High / Emergency</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="admin-tabs">
+      <button class="admin-tab active" onclick="switchTab('tab-grievances', this)">Grievance Management</button>
+      <button class="admin-tab" onclick="switchTab('tab-resources', this)">Village Resources</button>
+      <button class="admin-tab" onclick="switchTab('tab-users', this)">Registered Users</button>
+      <button class="admin-tab" onclick="switchTab('tab-reports', this)">Reports &amp; Analytics</button>
+    </div>
+
+    <!-- ===================================================================
+         TAB 1: GRIEVANCE MANAGEMENT
+         =================================================================== -->
+    <div id="tab-grievances" class="tab-pane active">
+      <div class="card" style="padding:1.25rem;">
+        <!-- Data Structure Controls & Filters -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
+          <!-- Queue Mode Buttons -->
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button type="button" id="btn-mode-priority" class="btn btn-sm btn-primary" onclick="loadAdminGrievances('priority')">
+              <span>&#9889;</span> View by Priority Queue (Heapq)
+            </button>
+            <button type="button" id="btn-mode-fifo" class="btn btn-sm btn-outline" onclick="loadAdminGrievances('fifo')">
+              <span>&#9203;</span> Standard FIFO Queue
+            </button>
+            <button type="button" id="btn-mode-default" class="btn btn-sm btn-outline" onclick="loadAdminGrievances('default')">
+              <span>&#128197;</span> Newest First
+            </button>
+          </div>
+
+          <!-- Search & Filter Controls -->
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <input type="text" id="admin-grv-search" class="form-control" style="width:200px; padding:0.35rem 0.6rem; font-size:0.85rem;" placeholder="Search code/name...">
+            <select id="admin-filter-status" class="form-control" style="width:140px; padding:0.35rem 0.6rem; font-size:0.85rem;" onchange="applyAdminFilter()">
+              <option value="All">All Statuses</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Verified">Verified</option>
+              <option value="Assigned">Assigned</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Resolved">Resolved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Data Structure Info Indicator Banner -->
+        <div id="data-structure-info" style="font-size:0.85rem; padding:0.5rem 0.75rem; background:var(--surface-alt); border-radius:var(--radius-sm); margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
+          <span><strong>Active Queue Discipline:</strong> <span id="queue-discipline-label">Priority Queue (Min-Heap: Emergency > High > Medium > Low)</span></span>
+          <span id="grv-count-label" style="color:var(--text-muted); font-weight:600;"></span>
+        </div>
+
+        <!-- Grievances Table -->
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Villager</th>
+                <th>Category</th>
+                <th>Subject</th>
+                <th>Priority</th>
+                <th>Department</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-grievances-tbody">
+              <tr>
+                <td colspan="9" style="text-align:center; padding:2rem; color:var(--text-muted);">Loading grievances...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================
+         TAB 2: VILLAGE RESOURCES
+         =================================================================== -->
+    <div id="tab-resources" class="tab-pane">
+      <div class="card" style="padding:1.25rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <h3 class="card-title" style="margin-bottom:0;">Public Resources Management</h3>
+          <button class="btn btn-primary btn-sm" onclick="openResourceModal()">+ Add New Resource</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Location</th>
+                <th>Contact</th>
+                <th>Availability</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-resources-tbody">
+              <tr><td colspan="6" style="text-align:center; padding:2rem;">Loading resources...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================
+         TAB 3: REGISTERED USERS
+         =================================================================== -->
+    <div id="tab-users" class="tab-pane">
+      <div class="card" style="padding:1.25rem;">
+        <div class="card-title">Registered Citizens &amp; Staff</div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Full Name</th>
+                <th>Mobile</th>
+                <th>Email</th>
+                <th>Village</th>
+                <th>Role</th>
+                <th>Registered Date</th>
+              </tr>
+            </thead>
+            <tbody id="admin-users-tbody">
+              <tr><td colspan="7" style="text-align:center; padding:2rem;">Loading users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================
+         TAB 4: REPORTS & ANALYTICS
+         =================================================================== -->
+    <div id="tab-reports" class="tab-pane">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:1.5rem;">
+        <!-- Grievances by Category -->
+        <div class="card">
+          <h3 class="card-title">Grievances by Category</h3>
+          <div id="report-category-bars" style="margin-top:1rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Grievances by Priority -->
+        <div class="card">
+          <h3 class="card-title">Grievances by Priority</h3>
+          <div id="report-priority-bars" style="margin-top:1rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Grievances by Status -->
+        <div class="card">
+          <h3 class="card-title">Grievances by Status</h3>
+          <div id="report-status-bars" style="margin-top:1rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Grievances by Department -->
+        <div class="card">
+          <h3 class="card-title">Department Allocation</h3>
+          <div id="report-department-bars" style="margin-top:1rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===================================================================
+       MODAL 1: GRIEVANCE ACTION / UPDATE WORKFLOW MODAL
+       =================================================================== -->
+  <div class="modal-backdrop" id="grv-action-modal">
+    <div class="modal-box" style="max-width:620px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="action-modal-title">Administrative Grievance Action</h3>
+        <button class="modal-close" onclick="closeActionModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="action-grv-id">
+
+        <div style="background:var(--surface-alt); padding:0.85rem; border-radius:var(--radius-md); font-size:0.85rem; margin-bottom:1.25rem;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+            <strong id="action-code">GRV-2026-XXXX</strong>
+            <span id="action-current-badges"></span>
+          </div>
+          <div id="action-subject" style="font-weight:600; color:var(--text-main);"></div>
+          <div id="action-desc" style="color:var(--text-muted); font-size:0.8rem; margin-top:0.25rem;"></div>
+        </div>
+
+        <form id="grv-action-form">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="action-status-select">Update Workflow Status</label>
+              <select id="action-status-select" class="form-control" required>
+                <option value="Submitted">Submitted (Under Intake)</option>
+                <option value="Verified">Verified (On-site Inspection Completed)</option>
+                <option value="Assigned">Assigned (Transferred to Department)</option>
+                <option value="In Progress">In Progress (Field Work Active)</option>
+                <option value="Resolved">Resolved (Work Done & Verified)</option>
+                <option value="Rejected">Rejected (Not actionable / Invalid)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="action-priority-select">Triage Priority</label>
+              <select id="action-priority-select" class="form-control" required>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Emergency">Emergency</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="action-dept-select">Assign Responsible Department</label>
+            <select id="action-dept-select" class="form-control">
+              <option value="">-- Unassigned --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="action-comment">Official Action / Progress Comment <span style="color:var(--danger)">*</span></label>
+            <textarea id="action-comment" class="form-control" placeholder="Enter details of action taken, inspection notes, or resolution confirmation..." required rows="3"></textarea>
+            <div class="form-help">This comment is appended to the citizen's public tracking timeline with your timestamp.</div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline btn-sm" onclick="closeActionModal()">Cancel</button>
+            <button type="submit" id="action-submit-btn" class="btn btn-primary btn-sm">Save &amp; Update Timeline</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL 2: RESOURCE ADD/EDIT MODAL
+       =================================================================== -->
+  <div class="modal-backdrop" id="resource-crud-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="res-crud-title">Add Village Resource</h3>
+        <button class="modal-close" onclick="closeResourceCrudModal()">&times;</button>
+      </div>
+      <form id="resource-crud-form">
+        <input type="hidden" id="res-crud-id">
+        <div class="form-group">
+          <label class="form-label">Resource Name *</label>
+          <input type="text" id="res-name-input" class="form-control" required placeholder="e.g. Sub-District Veterinary Dispensary">
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Category *</label>
+            <select id="res-cat-input" class="form-control" required>
+              <option value="Health">Health</option>
+              <option value="Education">Education</option>
+              <option value="Administration">Administration</option>
+              <option value="Utilities">Utilities</option>
+              <option value="Public Facility">Public Facility</option>
+              <option value="Transport">Transport</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contact</label>
+            <input type="text" id="res-contact-input" class="form-control" placeholder="+91 98220 11000">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Location</label>
+          <input type="text" id="res-loc-input" class="form-control" placeholder="e.g. Ward 2, Near Panchayat Well">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Availability / Hours</label>
+          <input type="text" id="res-avail-input" class="form-control" placeholder="e.g. Mon-Sat 9 AM - 5 PM">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="res-desc-input" class="form-control" rows="3" placeholder="Detailed service info..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-sm" onclick="closeResourceCrudModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Save Resource</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/script.js"></script>
+  <script>
+    let currentAdminGrievances = [];
+    let allDepartments = [];
+    let currentViewMode = "priority";
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      // Require Admin session
+      const res = await fetch("/api/session");
+      const data = await res.json();
+      if (!data.authenticated || data.user.role !== "admin") {
+        showToast("Administrative credentials required", "error");
+        setTimeout(() => { window.location.href = "login.html"; }, 800);
+        return;
+      }
+
+      document.getElementById("admin-user-tag").textContent = `Logged in as: ${data.user.full_name} (${data.user.email})`;
+
+      // Load initial dashboard statistics and departments
+      loadStatistics();
+      loadDepartments();
+
+      // Load grievances using Priority Queue by default
+      loadAdminGrievances("priority");
+
+      // Setup search listener
+      document.getElementById("admin-grv-search").addEventListener("input", (e) => {
+        applyAdminFilter();
+      });
+    });
+
+    // Tab switcher
+    function switchTab(tabId, btn) {
+      document.querySelectorAll(".admin-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+
+      btn.classList.add("active");
+      document.getElementById(tabId).classList.add("active");
+
+      if (tabId === "tab-resources") loadAdminResources();
+      if (tabId === "tab-users") loadAdminUsers();
+      if (tabId === "tab-reports") loadAdminReports();
+    }
+
+    // Load High Level Statistics
+    async function loadStatistics() {
+      try {
+        const res = await fetch("/api/admin/statistics");
+        const data = await res.json();
+        if (data.success && data.statistics) {
+          const s = data.statistics;
+          document.getElementById("admin-stat-users").textContent = s.total_users;
+          document.getElementById("admin-stat-grievances").textContent = s.total_grievances;
+          document.getElementById("admin-stat-pending").textContent = s.pending;
+          document.getElementById("admin-stat-inprogress").textContent = s.in_progress;
+          document.getElementById("admin-stat-resolved").textContent = s.resolved;
+          document.getElementById("admin-stat-high").textContent = s.high_priority;
+        }
+      } catch (e) {
+        console.error("Stats load failed:", e);
+      }
+    }
+
+    // Load Department Options for Dropdowns
+    async function loadDepartments() {
+      try {
+        const res = await fetch("/api/departments");
+        const data = await res.json();
+        if (data.success && data.departments) {
+          allDepartments = data.departments;
+          const select = document.getElementById("action-dept-select");
+          select.innerHTML = '<option value="">-- Unassigned --</option>' +
+            allDepartments.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
+        }
+      } catch (e) {
+        console.error("Departments load error:", e);
+      }
+    }
+
+    // =========================================================================
+    // GRIEVANCE MANAGEMENT & QUEUE INTEGRATION
+    // =========================================================================
+
+    async function loadAdminGrievances(mode = "priority") {
+      currentViewMode = mode;
+      const tbody = document.getElementById("admin-grievances-tbody");
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem;">Fetching queue (${mode})...</td></tr>`;
+
+      // Update button styling
+      const btnPri = document.getElementById("btn-mode-priority");
+      const btnFifo = document.getElementById("btn-mode-fifo");
+      const btnDef = document.getElementById("btn-mode-default");
+
+      [btnPri, btnFifo, btnDef].forEach(b => {
+        b.className = "btn btn-sm btn-outline";
+      });
+
+      if (mode === "priority") {
+        btnPri.className = "btn btn-sm btn-primary";
+        document.getElementById("queue-discipline-label").textContent = "Priority Queue (Min-Heap: Emergency > High > Medium > Low)";
+      } else if (mode === "fifo") {
+        btnFifo.className = "btn btn-sm btn-primary";
+        document.getElementById("queue-discipline-label").textContent = "FIFO Queue (Chronological sequential intake)";
+      } else {
+        btnDef.className = "btn btn-sm btn-primary";
+        document.getElementById("queue-discipline-label").textContent = "Standard Timestamp Sorting (Newest First)";
+      }
+
+      try {
+        // Calls backend which invokes GrievancePriorityQueue or GrievanceQueue!
+        const res = await fetch(`/api/admin/grievances?view=${mode}`);
+        const data = await res.json();
+
+        if (data.success && data.grievances) {
+          currentAdminGrievances = data.grievances;
+          applyAdminFilter();
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--danger); padding:2rem;">Failed to fetch grievances.</td></tr>`;
+      }
+    }
+
+    function applyAdminFilter() {
+      const search = document.getElementById("admin-grv-search").value.trim().toLowerCase();
+      const statusFilter = document.getElementById("admin-filter-status").value;
+
+      let filtered = currentAdminGrievances;
+
+      if (statusFilter !== "All") {
+        filtered = filtered.filter(g => g.status === statusFilter);
+      }
+
+      if (search) {
+        filtered = filtered.filter(g => {
+          const text = `${g.grievance_code} ${g.submitter_name} ${g.subject} ${g.category} ${g.location}`.toLowerCase();
+          return text.includes(search);
+        });
+      }
+
+      renderAdminGrievances(filtered);
+    }
+
+    function renderAdminGrievances(items) {
+      const tbody = document.getElementById("admin-grievances-tbody");
+      document.getElementById("grv-count-label").textContent = `Showing ${items.length} item(s)`;
+
+      if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:var(--text-muted);">No grievances matching the active filter.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map(g => `
+        <tr>
+          <td><a href="track.html?code=${encodeURIComponent(g.grievance_code)}" target="_blank" style="font-weight:700;">${escapeHtml(g.grievance_code)}</a></td>
+          <td>
+            <strong>${escapeHtml(g.submitter_name || "Villager")}</strong>
+            <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(g.submitter_mobile || "")}</div>
+          </td>
+          <td>${escapeHtml(g.category)}</td>
+          <td>
+            <div style="max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(g.subject)}">
+              ${escapeHtml(g.subject)}
+            </div>
+          </td>
+          <td>${getPriorityBadge(g.priority)}</td>
+          <td>${escapeHtml(g.department_name || "Unassigned")}</td>
+          <td>${getStatusBadge(g.status)}</td>
+          <td style="font-size:0.75rem; color:var(--text-muted);">${formatDate(g.created_at)}</td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="openActionModal(${g.id})">Update</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    // Grievance Action Modal
+    function openActionModal(id) {
+      const g = currentAdminGrievances.find(x => x.id === id);
+      if (!g) return;
+
+      document.getElementById("action-grv-id").value = g.id;
+      document.getElementById("action-code").textContent = g.grievance_code;
+      document.getElementById("action-subject").textContent = g.subject;
+      document.getElementById("action-desc").textContent = g.description;
+      document.getElementById("action-current-badges").innerHTML = `${getPriorityBadge(g.priority)} ${getStatusBadge(g.status)}`;
+
+      document.getElementById("action-status-select").value = g.status;
+      document.getElementById("action-priority-select").value = g.priority;
+      document.getElementById("action-dept-select").value = g.department_id || "";
+      document.getElementById("action-comment").value = "";
+
+      document.getElementById("grv-action-modal").classList.add("open");
+    }
+
+    function closeActionModal() {
+      document.getElementById("grv-action-modal").classList.remove("open");
+    }
+
+    document.getElementById("grv-action-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = document.getElementById("action-grv-id").value;
+      const status = document.getElementById("action-status-select").value;
+      const priority = document.getElementById("action-priority-select").value;
+      const department_id = document.getElementById("action-dept-select").value ? parseInt(document.getElementById("action-dept-select").value) : null;
+      const comment = document.getElementById("action-comment").value.trim();
+
+      const btn = document.getElementById("action-submit-btn");
+      btn.disabled = true;
+      btn.textContent = "Updating...";
+
+      try {
+        const res = await fetch(`/api/grievances/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ status, priority, department_id, comment })
+        });
+
+        const data = await res.json();
+        btn.disabled = false;
+        btn.textContent = "Save & Update Timeline";
+
+        if (res.ok && data.success) {
+          showToast("Grievance workflow updated successfully!", "success");
+          closeActionModal();
+          loadStatistics();
+          loadAdminGrievances(currentViewMode);
+        } else {
+          showToast(data.error || "Update failed", "error");
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Save & Update Timeline";
+        showToast("Error communicating with server", "error");
+      }
+    });
+
+    // =========================================================================
+    // RESOURCES MANAGEMENT (CRUD)
+    // =========================================================================
+
+    let adminResourcesList = [];
+
+    async function loadAdminResources() {
+      const tbody = document.getElementById("admin-resources-tbody");
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:2rem;">Loading resources...</td></tr>`;
+
+      try {
+        const res = await fetch("/api/admin/resources");
+        const data = await res.json();
+        if (data.success && data.resources) {
+          adminResourcesList = data.resources;
+          tbody.innerHTML = adminResourcesList.map(r => `
+            <tr>
+              <td><strong>${escapeHtml(r.name)}</strong></td>
+              <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${escapeHtml(r.category)}</span></td>
+              <td>${escapeHtml(r.location || "-")}</td>
+              <td>${escapeHtml(r.contact || "-")}</td>
+              <td>${escapeHtml(r.availability || "-")}</td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="editResource(${r.id})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteResource(${r.id})">Delete</button>
+              </td>
+            </tr>
+          `).join("");
+        }
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--danger);">Failed to load resources.</td></tr>`;
+      }
+    }
+
+    function openResourceModal() {
+      document.getElementById("res-crud-id").value = "";
+      document.getElementById("res-crud-title").textContent = "Add Village Resource";
+      document.getElementById("res-name-input").value = "";
+      document.getElementById("res-cat-input").value = "Health";
+      document.getElementById("res-contact-input").value = "";
+      document.getElementById("res-loc-input").value = "";
+      document.getElementById("res-avail-input").value = "";
+      document.getElementById("res-desc-input").value = "";
+      document.getElementById("resource-crud-modal").classList.add("open");
+    }
+
+    function editResource(id) {
+      const r = adminResourcesList.find(x => x.id === id);
+      if (!r) return;
+      document.getElementById("res-crud-id").value = r.id;
+      document.getElementById("res-crud-title").textContent = "Edit Village Resource";
+      document.getElementById("res-name-input").value = r.name;
+      document.getElementById("res-cat-input").value = r.category;
+      document.getElementById("res-contact-input").value = r.contact || "";
+      document.getElementById("res-loc-input").value = r.location || "";
+      document.getElementById("res-avail-input").value = r.availability || "";
+      document.getElementById("res-desc-input").value = r.description || "";
+      document.getElementById("resource-crud-modal").classList.add("open");
+    }
+
+    function closeResourceCrudModal() {
+      document.getElementById("resource-crud-modal").classList.remove("open");
+    }
+
+    document.getElementById("resource-crud-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = document.getElementById("res-crud-id").value;
+      const name = document.getElementById("res-name-input").value.trim();
+      const category = document.getElementById("res-cat-input").value;
+      const contact = document.getElementById("res-contact-input").value.trim();
+      const location = document.getElementById("res-loc-input").value.trim();
+      const availability = document.getElementById("res-avail-input").value.trim();
+      const description = document.getElementById("res-desc-input").value.trim();
+
+      const method = id ? "PUT" : "POST";
+      const url = id ? `/api/resources/${id}` : "/api/resources";
+
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ name, category, contact, location, availability, description })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast(id ? "Resource updated!" : "Resource created!", "success");
+          closeResourceCrudModal();
+          loadAdminResources();
+          loadStatistics();
+        } else {
+          showToast(data.error || "Save failed", "error");
+        }
+      } catch (err) {
+        showToast("Server communication error", "error");
+      }
+    });
+
+    async function deleteResource(id) {
+      if (!confirm("Are you sure you want to delete this resource record?")) return;
+      try {
+        const res = await fetch(`/api/resources/${id}`, { method: "DELETE", credentials: "same-origin" });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast("Resource deleted", "info");
+          loadAdminResources();
+          loadStatistics();
+        }
+      } catch (e) {
+        showToast("Delete failed", "error");
+      }
+    }
+
+    // =========================================================================
+    // USERS MANAGEMENT
+    // =========================================================================
+
+    async function loadAdminUsers() {
+      const tbody = document.getElementById("admin-users-tbody");
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2rem;">Loading users...</td></tr>`;
+
+      try {
+        const res = await fetch("/api/admin/users");
+        const data = await res.json();
+        if (data.success && data.users) {
+          tbody.innerHTML = data.users.map(u => `
+            <tr>
+              <td>${u.id}</td>
+              <td><strong>${escapeHtml(u.full_name)}</strong></td>
+              <td>${escapeHtml(u.mobile)}</td>
+              <td>${escapeHtml(u.email || "-")}</td>
+              <td>${escapeHtml(u.village)}</td>
+              <td><span class="user-role-badge ${u.role === 'admin' ? 'role-admin' : 'role-villager'}">${u.role}</span></td>
+              <td style="font-size:0.8rem; color:var(--text-muted);">${formatDate(u.created_at)}</td>
+            </tr>
+          `).join("");
+        }
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--danger);">Failed to load user records.</td></tr>`;
+      }
+    }
+
+    // =========================================================================
+    // REPORTS & CHARTS (PURE CSS PROGRESS BARS)
+    // =========================================================================
+
+    async function loadAdminReports() {
+      try {
+        const res = await fetch("/api/admin/reports");
+        const data = await res.json();
+
+        if (data.success && data.reports) {
+          const r = data.reports;
+          const totalGrv = r.summary.total_grievances || 1;
+
+          // Render Category bars
+          renderBars("report-category-bars", r.by_category.map(x => ({
+            label: x.category,
+            value: x.count,
+            percent: Math.round((x.count / totalGrv) * 100),
+            color: "var(--primary)"
+          })));
+
+          // Render Priority bars
+          renderBars("report-priority-bars", r.by_priority.map(x => {
+            let color = "var(--primary)";
+            if (x.priority === "Emergency") color = "var(--danger)";
+            else if (x.priority === "High") color = "var(--accent)";
+            else if (x.priority === "Medium") color = "var(--warning)";
+            return {
+              label: x.priority,
+              value: x.count,
+              percent: Math.round((x.count / totalGrv) * 100),
+              color
+            };
+          }));
+
+          // Render Status bars
+          renderBars("report-status-bars", r.by_status.map(x => ({
+            label: x.status,
+            value: x.count,
+            percent: Math.round((x.count / totalGrv) * 100),
+            color: x.status === "Resolved" ? "var(--success)" : "var(--info)"
+          })));
+
+          // Render Department bars
+          renderBars("report-department-bars", r.by_department.map(x => ({
+            label: x.department,
+            value: x.count,
+            percent: Math.round((x.count / totalGrv) * 100),
+            color: "var(--secondary)"
+          })));
+        }
+      } catch (e) {
+        console.error("Reports loading error:", e);
+      }
+    }
+
+    function renderBars(containerId, items) {
+      const container = document.getElementById(containerId);
+      if (items.length === 0) {
+        container.innerHTML = "<div style='color:var(--text-muted); font-size:0.9rem;'>No data available.</div>";
+        return;
+      }
+
+      container.innerHTML = items.map(item => `
+        <div class="chart-bar-container">
+          <div class="chart-bar-header">
+            <span>${escapeHtml(item.label)}</span>
+            <span><strong>${item.value}</strong> (${item.percent}%)</span>
+          </div>
+          <div class="chart-bar-bg">
+            <div class="chart-bar-fill" style="width: ${item.percent}%; background-color: ${item.color};"></div>
+          </div>
+        </div>
+      `).join("");
+    }
+  </script>
+</body>
+</html>

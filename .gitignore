@@ -1,0 +1,19 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local database files
+*.db
+village_system.db
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/

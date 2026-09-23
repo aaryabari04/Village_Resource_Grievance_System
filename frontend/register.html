@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Villager Registration - Village Resources & Grievance Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-brand">
+        <img src="/assets/images/logo.svg" alt="Emblem" width="32" height="32">
+        <span>GramSeva</span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="index.html" data-i18n="nav_home">Home</a></li>
+        <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
+        <li><a href="grievance.html" data-i18n="nav_grievance">Report Grievance</a></li>
+        <li><a href="track.html" data-i18n="nav_track">Track Grievance</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <select id="lang-select" class="lang-select" aria-label="Select Language">
+          <option value="en">English</option>
+          <option value="mr">मराठी</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+        <div id="nav-auth-actions"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Register Form Container -->
+  <main class="container" style="max-width: 580px; margin: 2.5rem auto;">
+    <div class="card" style="padding: 2.25rem;">
+      <div style="text-align: center; margin-bottom: 1.75rem;">
+        <img src="/assets/images/logo.svg" alt="Logo" width="48" height="48" style="margin-bottom:0.75rem;">
+        <h2 style="font-size: 1.6rem; font-weight: 700; color: var(--text-main);" data-i18n="nav_register">Villager Registration</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;">
+          Create your civic profile to submit complaints and track public village infrastructure
+        </p>
+      </div>
+
+      <form id="register-form">
+        <div class="form-group">
+          <label class="form-label" for="reg-name">Full Name <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="reg-name" class="form-control" placeholder="e.g. Ramesh Patil" required>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="reg-mobile">Mobile Number <span style="color:var(--danger)">*</span></label>
+            <input type="tel" id="reg-mobile" class="form-control" placeholder="10-digit mobile (e.g. 9822011223)" required pattern="[0-9]{10}">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="reg-email">Email Address (Optional)</label>
+            <input type="email" id="reg-email" class="form-control" placeholder="e.g. ramesh@village.local">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="reg-village">Village / Gram Panchayat <span style="color:var(--danger)">*</span></label>
+            <input type="text" id="reg-village" class="form-control" value="Sundarpur" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="reg-address">House / Ward / Lane Address</label>
+            <input type="text" id="reg-address" class="form-control" placeholder="e.g. House No. 42, North Para">
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="reg-password">Password <span style="color:var(--danger)">*</span></label>
+            <input type="password" id="reg-password" class="form-control" placeholder="Minimum 6 characters" required minlength="6">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="reg-confirm-password">Confirm Password <span style="color:var(--danger)">*</span></label>
+            <input type="password" id="reg-confirm-password" class="form-control" placeholder="Re-type password" required minlength="6">
+          </div>
+        </div>
+
+        <div id="register-alert" style="display:none; padding:0.75rem; border-radius:var(--radius-md); margin-bottom:1.25rem; font-size:0.875rem;"></div>
+
+        <button type="submit" id="register-submit-btn" class="btn btn-primary" style="width: 100%;">
+          Create Account
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+        Already registered? <a href="login.html" style="font-weight:600;">Sign In Here</a>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/script.js"></script>
+  <script>
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const alertBox = document.getElementById("register-alert");
+      const submitBtn = document.getElementById("register-submit-btn");
+
+      alertBox.style.display = "none";
+
+      const full_name = document.getElementById("reg-name").value.trim();
+      const mobile = document.getElementById("reg-mobile").value.trim();
+      const email = document.getElementById("reg-email").value.trim();
+      const village = document.getElementById("reg-village").value.trim();
+      const address = document.getElementById("reg-address").value.trim();
+      const password = document.getElementById("reg-password").value;
+      const confirm_password = document.getElementById("reg-confirm-password").value;
+
+      // Basic client-side validation
+      if (password !== confirm_password) {
+        alertBox.style.display = "block";
+        alertBox.style.backgroundColor = "var(--danger-light)";
+        alertBox.style.color = "var(--danger)";
+        alertBox.textContent = "Passwords do not match. Please verify and retype.";
+        return;
+      }
+
+      if (mobile.length !== 10 || !/^\d+$/.test(mobile)) {
+        alertBox.style.display = "block";
+        alertBox.style.backgroundColor = "var(--danger-light)";
+        alertBox.style.color = "var(--danger)";
+        alertBox.textContent = "Please enter a valid 10-digit mobile number.";
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Creating Account...";
+
+      try {
+        const response = await fetch("/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            full_name,
+            mobile,
+            email,
+            village,
+            address,
+            password,
+            confirm_password
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          alertBox.style.display = "block";
+          alertBox.style.backgroundColor = "var(--success-light)";
+          alertBox.style.color = "var(--success)";
+          alertBox.textContent = "Registration successful! Redirecting you to login...";
+          showToast("Account created successfully! You can now log in.", "success");
+
+          setTimeout(() => {
+            window.location.href = "login.html";
+          }, 1200);
+        } else {
+          alertBox.style.display = "block";
+          alertBox.style.backgroundColor = "var(--danger-light)";
+          alertBox.style.color = "var(--danger)";
+          alertBox.textContent = data.error || "Registration failed. Please check your information.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Create Account";
+        }
+      } catch (err) {
+        alertBox.style.display = "block";
+        alertBox.style.backgroundColor = "var(--danger-light)";
+        alertBox.style.color = "var(--danger)";
+        alertBox.textContent = "Unable to connect to server. Please try again.";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Create Account";
+      }
+    });
+  </script>
+</body>
+</html>

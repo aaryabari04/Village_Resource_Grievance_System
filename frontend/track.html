@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Track Grievance - Village Resources & Grievance Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-brand">
+        <img src="/assets/images/logo.svg" alt="Emblem" width="32" height="32">
+        <span>GramSeva</span>
+      </a>
+
+      <button class="nav-toggle" id="nav-toggle">&#9776;</button>
+
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html" data-i18n="nav_home">Home</a></li>
+        <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
+        <li><a href="grievance.html" data-i18n="nav_grievance">Report Grievance</a></li>
+        <li><a href="track.html" class="active" data-i18n="nav_track">Track Grievance</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <select id="lang-select" class="lang-select">
+          <option value="en">English</option>
+          <option value="mr">मराठी</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+        <div id="nav-auth-actions"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Track Grievance Main -->
+  <main class="container" style="max-width: 860px; margin: 2rem auto;">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title" data-i18n="nav_track">Track Grievance Status</h1>
+        <p class="page-subtitle">Enter your official Grievance Code to see live administrative verification, department dispatch, and resolution notes.</p>
+      </div>
+    </div>
+
+    <!-- Search / Lookup Box -->
+    <div class="card" style="padding: 1.5rem;">
+      <form id="track-form" style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+        <input type="text" id="track-code-input" class="form-control" style="flex:1; min-width:240px; font-weight:600; text-transform:uppercase;" placeholder="Enter code (e.g. GRV-2026-0001)" required>
+        <button type="submit" id="track-submit-btn" class="btn btn-primary">
+          <span>&#128269;</span> Check Status
+        </button>
+      </form>
+      <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem;">
+        Tip: You can test with demo codes: 
+        <a href="javascript:void(0)" onclick="quickLookup('GRV-2026-0001')">GRV-2026-0001 (Emergency - Water)</a> &bull; 
+        <a href="javascript:void(0)" onclick="quickLookup('GRV-2026-0002')">GRV-2026-0002 (Electricity)</a> &bull; 
+        <a href="javascript:void(0)" onclick="quickLookup('GRV-2026-0005')">GRV-2026-0005 (Resolved)</a>
+      </div>
+    </div>
+
+    <div id="track-error-alert" style="display:none; padding:1rem; border-radius:var(--radius-md); background:var(--danger-light); color:var(--danger); margin-bottom:1.5rem;"></div>
+
+    <!-- Grievance Details Container -->
+    <div id="grievance-details-panel" style="display:none;">
+      <!-- Main Status Card -->
+      <div class="card" style="border-top: 5px solid var(--primary);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
+          <div>
+            <div style="font-size:0.85rem; color:var(--text-muted);">Grievance Code</div>
+            <h2 id="grv-code-title" style="font-size:1.75rem; font-weight:800; color:var(--primary); letter-spacing:0.5px;">GRV-2026-0001</h2>
+          </div>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <span id="grv-priority-badge"></span>
+            <span id="grv-status-badge"></span>
+          </div>
+        </div>
+
+        <h3 id="grv-subject-title" style="font-size:1.25rem; font-weight:700; margin-bottom:0.5rem;">Subject text</h3>
+        <p id="grv-description-text" style="color:var(--text-muted); font-size:0.95rem; margin-bottom:1.25rem; line-height:1.6;"></p>
+
+        <!-- Meta grid -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; background:var(--surface-alt); padding:1.25rem; border-radius:var(--radius-md); font-size:0.875rem;">
+          <div><strong>Category:</strong> <span id="grv-category-val"></span></div>
+          <div><strong>Department:</strong> <span id="grv-department-val"></span></div>
+          <div><strong>Location:</strong> <span id="grv-location-val"></span></div>
+          <div><strong>Submitted By:</strong> <span id="grv-submitter-val"></span></div>
+          <div><strong>Filing Date:</strong> <span id="grv-created-val"></span></div>
+          <div><strong>Last Action:</strong> <span id="grv-updated-val"></span></div>
+        </div>
+      </div>
+
+      <!-- Chronological Updates Timeline -->
+      <div class="card">
+        <div class="card-title">
+          <span>Administrative Redressal Timeline</span>
+          <span style="font-size:0.85rem; font-weight:normal; color:var(--text-muted);" id="timeline-count-badge"></span>
+        </div>
+
+        <div class="timeline" id="grievance-timeline-container">
+          <!-- Timeline items rendered dynamically -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Check query parameter ?code=
+      const urlParams = new URLSearchParams(window.location.search);
+      const codeParam = urlParams.get("code");
+      if (codeParam) {
+        document.getElementById("track-code-input").value = codeParam;
+        fetchGrievanceByCode(codeParam);
+      }
+
+      document.getElementById("track-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const code = document.getElementById("track-code-input").value.trim();
+        if (code) {
+          fetchGrievanceByCode(code);
+        }
+      });
+    });
+
+    function quickLookup(code) {
+      document.getElementById("track-code-input").value = code;
+      fetchGrievanceByCode(code);
+    }
+
+    async function fetchGrievanceByCode(code) {
+      const errBox = document.getElementById("track-error-alert");
+      const detailsPanel = document.getElementById("grievance-details-panel");
+      const submitBtn = document.getElementById("track-submit-btn");
+
+      errBox.style.display = "none";
+      detailsPanel.style.display = "none";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Fetching...";
+
+      try {
+        const response = await fetch(`/api/grievances/${encodeURIComponent(code)}`);
+        const data = await response.json();
+
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = "<span>&#128269;</span> Check Status";
+
+        if (response.ok && data.success && data.grievance) {
+          renderGrievanceDetails(data.grievance, data.timeline || []);
+          detailsPanel.style.display = "block";
+        } else {
+          errBox.style.display = "block";
+          errBox.textContent = data.error || `No record found for grievance code "${code}". Please verify the code.`;
+        }
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = "<span>&#128269;</span> Check Status";
+        errBox.style.display = "block";
+        errBox.textContent = "Unable to connect to the server. Please verify backend status.";
+      }
+    }
+
+    function renderGrievanceDetails(g, timeline) {
+      document.getElementById("grv-code-title").textContent = g.grievance_code;
+      document.getElementById("grv-priority-badge").innerHTML = getPriorityBadge(g.priority);
+      document.getElementById("grv-status-badge").innerHTML = getStatusBadge(g.status);
+      document.getElementById("grv-subject-title").textContent = g.subject;
+      document.getElementById("grv-description-text").textContent = g.description;
+
+      document.getElementById("grv-category-val").textContent = g.category;
+      document.getElementById("grv-department-val").textContent = g.department_name || "Pending Assignment";
+      document.getElementById("grv-location-val").textContent = g.location;
+      document.getElementById("grv-submitter-val").textContent = `${g.submitter_name || "Villager"} (${g.submitter_village || "Sundarpur"})`;
+      document.getElementById("grv-created-val").textContent = formatDate(g.created_at);
+      document.getElementById("grv-updated-val").textContent = formatDate(g.updated_at);
+
+      // Render timeline
+      const timelineContainer = document.getElementById("grievance-timeline-container");
+      document.getElementById("timeline-count-badge").textContent = `${timeline.length} milestone(s) recorded`;
+
+      if (timeline.length === 0) {
+        timelineContainer.innerHTML = "<div style='color:var(--text-muted);'>No timeline updates recorded yet.</div>";
+        return;
+      }
+
+      timelineContainer.innerHTML = timeline.map((item, idx) => {
+        const isLatest = idx === timeline.length - 1;
+        return `
+          <div class="timeline-item">
+            <div class="timeline-node ${isLatest ? 'done' : ''}">
+              ${idx + 1}
+            </div>
+            <div class="timeline-content">
+              <div class="timeline-header">
+                <span class="timeline-status">${escapeHtml(item.status)}</span>
+                <span class="timeline-date">${formatDate(item.created_at)}</span>
+              </div>
+              <p class="timeline-comment">${escapeHtml(item.comment || "Status updated.")}</p>
+              ${item.updated_by_name ? `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.35rem;">Action by: ${escapeHtml(item.updated_by_name)} (${escapeHtml(item.updated_by_role || 'Official')})</div>` : ''}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  </script>
+</body>
+</html>

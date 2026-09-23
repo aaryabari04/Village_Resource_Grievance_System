@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Village Resources & Grievance Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-brand">
+        <img src="/assets/images/logo.svg" alt="Emblem" width="32" height="32">
+        <span>GramSeva</span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="index.html" data-i18n="nav_home">Home</a></li>
+        <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
+        <li><a href="grievance.html" data-i18n="nav_grievance">Report Grievance</a></li>
+        <li><a href="track.html" data-i18n="nav_track">Track Grievance</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <select id="lang-select" class="lang-select" aria-label="Select Language">
+          <option value="en">English</option>
+          <option value="mr">मराठी</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+        <div id="nav-auth-actions"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Login Form Container -->
+  <main class="container" style="max-width: 480px; margin: 3rem auto;">
+    <div class="card" style="padding: 2.25rem;">
+      <div style="text-align: center; margin-bottom: 1.75rem;">
+        <img src="/assets/images/logo.svg" alt="Logo" width="48" height="48" style="margin-bottom:0.75rem;">
+        <h2 style="font-size: 1.6rem; font-weight: 700; color: var(--text-main);" data-i18n="nav_login">Citizen &amp; Admin Login</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;">
+          Access your village dashboard or administrative controls
+        </p>
+      </div>
+
+      <!-- Role Selector Tabs -->
+      <div style="display:flex; background:var(--surface-alt); border-radius:var(--radius-md); padding:4px; margin-bottom:1.5rem;">
+        <button type="button" id="role-villager-btn" class="btn btn-sm" style="flex:1; background:var(--surface); box-shadow:var(--shadow-sm); font-weight:600;" onclick="selectRole('villager')">
+          Villager / Citizen
+        </button>
+        <button type="button" id="role-admin-btn" class="btn btn-sm" style="flex:1; background:transparent; color:var(--text-muted); font-weight:600;" onclick="selectRole('admin')">
+          Administrator
+        </button>
+      </div>
+
+      <form id="login-form">
+        <input type="hidden" id="role-input" value="villager">
+
+        <div class="form-group">
+          <label class="form-label" for="login-identifier">Email Address or Mobile Number</label>
+          <input type="text" id="login-identifier" class="form-control" placeholder="e.g. admin@village.local or 9822011223" required autofocus>
+          <div class="form-help">Registered email address or 10-digit mobile number.</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="login-password">Password</label>
+          <input type="password" id="login-password" class="form-control" placeholder="Enter your password" required>
+        </div>
+
+        <div id="login-alert" style="display:none; padding:0.75rem; border-radius:var(--radius-md); margin-bottom:1.25rem; font-size:0.875rem;"></div>
+
+        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%;">
+          Sign In
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+        Don't have an account yet? <a href="register.html" style="font-weight:600;">Register as Villager</a>
+      </div>
+
+      <!-- Demo Credentials Quick Helper Card -->
+      <div style="margin-top: 2rem; padding: 1rem; background-color: var(--surface-alt); border: 1px dashed var(--border); border-radius: var(--radius-md); font-size: 0.85rem;">
+        <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--text-main);">Demo Credentials for Evaluation:</div>
+        <div style="margin-bottom: 0.4rem;">
+          <span class="user-role-badge role-admin">Admin</span>
+          <a href="javascript:void(0)" onclick="fillCredentials('admin@village.local', 'Admin@123', 'admin')" style="margin-left: 0.5rem; font-weight:600;">
+            admin@village.local / Admin@123
+          </a>
+        </div>
+        <div>
+          <span class="user-role-badge role-villager">Villager</span>
+          <a href="javascript:void(0)" onclick="fillCredentials('ramesh@village.local', 'Villager@123', 'villager')" style="margin-left: 0.5rem; font-weight:600;">
+            ramesh@village.local / Villager@123
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/script.js"></script>
+  <script>
+    let selectedRole = "villager";
+
+    function selectRole(role) {
+      selectedRole = role;
+      document.getElementById("role-input").value = role;
+
+      const villagerBtn = document.getElementById("role-villager-btn");
+      const adminBtn = document.getElementById("role-admin-btn");
+
+      if (role === "villager") {
+        villagerBtn.style.background = "var(--surface)";
+        villagerBtn.style.boxShadow = "var(--shadow-sm)";
+        villagerBtn.style.color = "var(--text-main)";
+        adminBtn.style.background = "transparent";
+        adminBtn.style.boxShadow = "none";
+        adminBtn.style.color = "var(--text-muted)";
+      } else {
+        adminBtn.style.background = "var(--surface)";
+        adminBtn.style.boxShadow = "var(--shadow-sm)";
+        adminBtn.style.color = "var(--text-main)";
+        villagerBtn.style.background = "transparent";
+        villagerBtn.style.boxShadow = "none";
+        villagerBtn.style.color = "var(--text-muted)";
+      }
+    }
+
+    function fillCredentials(id, pass, role) {
+      selectRole(role);
+      document.getElementById("login-identifier").value = id;
+      document.getElementById("login-password").value = pass;
+    }
+
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const alertBox = document.getElementById("login-alert");
+      const submitBtn = document.getElementById("login-submit-btn");
+
+      alertBox.style.display = "none";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Authenticating...";
+
+      const identifier = document.getElementById("login-identifier").value.trim();
+      const password = document.getElementById("login-password").value;
+      const role = document.getElementById("role-input").value;
+
+      try {
+        const response = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ identifier, password, role })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          showToast(`Welcome, ${data.user.full_name}!`, "success");
+          alertBox.style.display = "block";
+          alertBox.style.backgroundColor = "var(--success-light)";
+          alertBox.style.color = "var(--success)";
+          alertBox.textContent = "Login successful. Redirecting to your dashboard...";
+
+          setTimeout(() => {
+            if (data.user.role === "admin") {
+              window.location.href = "admin.html";
+            } else {
+              window.location.href = "dashboard.html";
+            }
+          }, 600);
+        } else {
+          alertBox.style.display = "block";
+          alertBox.style.backgroundColor = "var(--danger-light)";
+          alertBox.style.color = "var(--danger)";
+          alertBox.textContent = data.error || "Authentication failed. Check your login details.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Sign In";
+        }
+      } catch (err) {
+        alertBox.style.display = "block";
+        alertBox.style.backgroundColor = "var(--danger-light)";
+        alertBox.style.color = "var(--danger)";
+        alertBox.textContent = "Unable to connect to the server. Please verify the Python server is running.";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Sign In";
+      }
+    });
+  </script>
+</body>
+</html>

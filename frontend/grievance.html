@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report Grievance - Village Resources & Grievance Management System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-brand">
+        <img src="/assets/images/logo.svg" alt="Emblem" width="32" height="32">
+        <span>GramSeva</span>
+      </a>
+
+      <button class="nav-toggle" id="nav-toggle">&#9776;</button>
+
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html" data-i18n="nav_home">Home</a></li>
+        <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
+        <li><a href="grievance.html" class="active" data-i18n="nav_grievance">Report Grievance</a></li>
+        <li><a href="track.html" data-i18n="nav_track">Track Grievance</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <select id="lang-select" class="lang-select">
+          <option value="en">English</option>
+          <option value="mr">मराठी</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+        <div id="nav-auth-actions"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Grievance Submission Container -->
+  <main class="container" style="max-width: 760px; margin: 2.5rem auto;">
+    <div class="card" style="padding: 2.25rem;">
+      <div style="margin-bottom: 1.75rem;">
+        <h1 class="page-title" style="font-size: 1.75rem;" data-i18n="nav_grievance">Report a Village Grievance</h1>
+        <p class="page-subtitle">
+          Submit your civic complaint or infrastructure failure directly to Gram Panchayat administration for priority queue triage.
+        </p>
+      </div>
+
+      <!-- Auth notice banner if guest -->
+      <div id="auth-alert" style="display:none; padding:1rem; background-color:var(--warning-light); border-left:4px solid var(--warning); border-radius:var(--radius-md); margin-bottom:1.5rem;">
+        <strong>Notice:</strong> You must be signed in as a registered resident to submit a grievance.
+        <a href="login.html" style="font-weight:700; margin-left:0.5rem;">Click here to Login</a> or <a href="register.html" style="font-weight:700;">Register</a>.
+      </div>
+
+      <form id="grievance-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="grv-category">Category / Sector <span style="color:var(--danger)">*</span></label>
+            <select id="grv-category" class="form-control" required>
+              <option value="">-- Select Category --</option>
+              <option value="Water Supply">Water Supply &amp; Pipelines</option>
+              <option value="Electricity">Electricity &amp; Streetlights</option>
+              <option value="Roads & Infrastructure">Roads &amp; Infrastructure</option>
+              <option value="Sanitation">Sanitation &amp; Waste Management</option>
+              <option value="Health">Health &amp; Clinic Facilities</option>
+              <option value="Education">Education &amp; Schools</option>
+              <option value="Public Facility">Public Facilities &amp; Halls</option>
+              <option value="Other">Other Village Issue</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="grv-priority">
+              Priority Urgency <span style="color:var(--danger)">*</span>
+            </label>
+            <select id="grv-priority" class="form-control" required>
+              <option value="Medium">Medium (Standard 3-5 days)</option>
+              <option value="Low">Low (General maintenance)</option>
+              <option value="High">High (Impacting multiple households)</option>
+              <option value="Emergency">Emergency (Immediate danger / pipe burst / power hazard)</option>
+            </select>
+            <div class="form-help">Emergency and High priority items enter the administrator's Priority Queue.</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="grv-subject">Grievance Subject <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="grv-subject" class="form-control" placeholder="Short summary (e.g. Drinking water motor failed in North Ward)" required maxlength="120">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="grv-location">Exact Location / Landmark in Village <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="grv-location" class="form-control" placeholder="e.g. Ward No. 3, Near Old Hanuman Temple & Primary School" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="grv-description">Detailed Description of Problem <span style="color:var(--danger)">*</span></label>
+          <textarea id="grv-description" class="form-control" placeholder="Provide full context, affected residents, when the problem started, and any safety risks..." required rows="5"></textarea>
+        </div>
+
+        <div id="form-error-alert" style="display:none; padding:0.75rem; border-radius:var(--radius-md); margin-bottom:1.25rem; font-size:0.875rem; background:var(--danger-light); color:var(--danger);"></div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem;">
+          <a href="dashboard.html" class="btn btn-outline">Cancel</a>
+          <button type="submit" id="grv-submit-btn" class="btn btn-primary btn-lg">
+            Submit Grievance
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <!-- Submission Success Modal -->
+  <div class="modal-backdrop" id="success-modal">
+    <div class="modal-box" style="text-align:center;">
+      <div style="width:64px; height:64px; background:var(--success-light); color:var(--success); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; margin:0 auto 1rem auto;">
+        &#10004;
+      </div>
+      <h3 style="font-size:1.5rem; font-weight:700; margin-bottom:0.5rem;">Grievance Submitted!</h3>
+      <p style="color:var(--text-muted); font-size:0.95rem; margin-bottom:1.25rem;">
+        Your grievance has been logged and entered into the Panchayat intake queue for administrative verification.
+      </p>
+
+      <div style="background:var(--surface-alt); padding:1rem; border-radius:var(--radius-md); border:1px dashed var(--primary); margin-bottom:1.5rem;">
+        <div style="font-size:0.85rem; color:var(--text-muted);">Unique Grievance Code:</div>
+        <div id="modal-code-display" style="font-size:1.6rem; font-weight:800; color:var(--primary); letter-spacing:1px; margin:0.25rem 0;">
+          GRV-2026-0000
+        </div>
+        <div style="font-size:0.8rem; color:var(--text-muted);">Please save this code to track your status anytime.</div>
+      </div>
+
+      <div style="display:flex; gap:0.75rem; justify-content:center;">
+        <button type="button" id="modal-track-btn" class="btn btn-primary">
+          Track Live Status Now
+        </button>
+        <a href="dashboard.html" class="btn btn-outline">Go to Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/script.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      // Check query param for category preset
+      const urlParams = new URLSearchParams(window.location.search);
+      const catParam = urlParams.get("category");
+      if (catParam) {
+        const catSelect = document.getElementById("grv-category");
+        for (let opt of catSelect.options) {
+          if (opt.value.toLowerCase() === catParam.toLowerCase()) {
+            opt.selected = true;
+            break;
+          }
+        }
+      }
+
+      // Check session
+      try {
+        const res = await fetch("/api/session");
+        const data = await res.json();
+        if (!data.authenticated) {
+          document.getElementById("auth-alert").style.display = "block";
+          document.getElementById("grv-submit-btn").disabled = true;
+          document.getElementById("grv-submit-btn").textContent = "Login Required to Submit";
+        }
+      } catch (e) {
+        console.error("Session verification failed:", e);
+      }
+    });
+
+    document.getElementById("grievance-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById("grv-submit-btn");
+      const errAlert = document.getElementById("form-error-alert");
+
+      errAlert.style.display = "none";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Registering Grievance...";
+
+      const category = document.getElementById("grv-category").value;
+      const priority = document.getElementById("grv-priority").value;
+      const subject = document.getElementById("grv-subject").value.trim();
+      const location = document.getElementById("grv-location").value.trim();
+      const description = document.getElementById("grv-description").value.trim();
+
+      try {
+        const response = await fetch("/api/grievances", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            category,
+            priority,
+            subject,
+            location,
+            description
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          showToast(`Grievance registered: ${data.grievance_code}`, "success");
+          document.getElementById("modal-code-display").textContent = data.grievance_code;
+
+          document.getElementById("modal-track-btn").onclick = () => {
+            window.location.href = `track.html?code=${encodeURIComponent(data.grievance_code)}`;
+          };
+
+          document.getElementById("success-modal").classList.add("open");
+        } else {
+          errAlert.style.display = "block";
+          errAlert.textContent = data.error || "Failed to submit grievance.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Submit Grievance";
+        }
+      } catch (err) {
+        errAlert.style.display = "block";
+        errAlert.textContent = "Unable to connect to the server. Please verify backend status.";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Grievance";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Village Resources & Grievance Management System
+# ===============================================
+# This project is deliberately built using 100% Python Standard Library.
+# NO EXTERNAL PYTHON DEPENDENCIES ARE REQUIRED!
+#
+# Standard Library Modules Utilized:
+# - http.server (HTTP server and request handling)
+# - socketserver (ThreadingMixIn for multi-threaded HTTP server)
+# - sqlite3 (Persistent relational database management)
+# - hashlib (PBKDF2-HMAC-SHA256 password hashing)
+# - heapq (Priority Queue implementation)
+# - collections (deque for FIFO Grievance Queue)
+# - json (JSON API request & response formatting)
+# - urllib.parse (Query string and URL routing)
+# - secrets (Cryptographically secure session token generation)
+# - unittest (Backend test suite execution)
+#
+# Requirements:
+# Python >= 3.8
