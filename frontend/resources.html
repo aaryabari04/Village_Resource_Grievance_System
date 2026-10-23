@@ -47,7 +47,7 @@
 
     <!-- Search & Filtering Bar -->
     <div class="card" style="padding: 1.25rem;">
-      <div style="display:flex; gap:0.75rem; margin-bottom: 1rem; flex-wrap:wrap;">
+      <div class="resource-search-controls" style="display:flex; gap:0.75rem; margin-bottom: 1rem; flex-wrap:wrap;">
         <input type="text" id="resource-search-input" class="form-control" style="flex:1; min-width:260px;" placeholder="Search by name, facility type, or location (e.g. clinic, water, school)..." data-i18n="search_placeholder">
         <button type="button" class="btn btn-primary" onclick="triggerSearch()">
           <span>&#128269;</span> Search
@@ -70,7 +70,7 @@
     </div>
 
     <!-- Results Status Info -->
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; font-size:0.9rem; color:var(--text-muted);">
+    <div class="resource-results-summary" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; font-size:0.9rem; color:var(--text-muted);">
       <span id="results-count-text">Showing resources...</span>
       <span id="search-algorithm-badge" style="font-size:0.75rem; background:var(--primary-light); color:var(--primary-dark); padding:0.2rem 0.5rem; border-radius:var(--radius-sm); font-weight:600;">
         Powered by Python Search Algorithms

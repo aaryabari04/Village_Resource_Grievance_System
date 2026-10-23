@@ -4,12 +4,14 @@ Handles SQLite connections, parameterized queries, password hashing, and CRUD op
 """
 
 import sqlite3
-import os
 import hashlib
 import secrets
+import hmac
 from datetime import datetime
-from pathlib import Path
-from config import DATABASE_PATH, SCHEMA_PATH, SEED_PATH, PRIORITY_WEIGHTS
+from config import DATABASE_PATH, PRIORITY_WEIGHTS
+
+PASSWORD_HASH_ITERATIONS = 600_000
+LEGACY_PASSWORD_HASH_ITERATIONS = 100_000
 
 
 def get_db_connection():
@@ -30,33 +32,42 @@ def get_db_connection():
 def hash_password(password: str) -> str:
     """
     Hashes a password using PBKDF2-HMAC-SHA256 with a random 16-byte salt.
-    Returns string format: salt_hex$hash_hex
+    Returns a versioned PBKDF2-HMAC-SHA256 hash.
     """
     salt = secrets.token_hex(16)
     pw_hash = hashlib.pbkdf2_hmac(
         'sha256',
         password.encode('utf-8'),
         salt.encode('utf-8'),
-        iterations=100000
+        iterations=PASSWORD_HASH_ITERATIONS
     ).hex()
-    return f"{salt}${pw_hash}"
+    return f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}${salt}${pw_hash}"
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
     """
-    Verifies a plain password against stored salt_hex$hash_hex.
-    Uses hmac.compare_digest to prevent timing attacks.
+    Verifies a versioned or legacy PBKDF2 hash in constant time.
     """
     try:
-        salt, expected_hash = stored_hash.split("$", 1)
+        parts = stored_hash.split("$")
+        if len(parts) == 4 and parts[0] == "pbkdf2_sha256":
+            iterations = int(parts[1])
+            salt, expected_hash = parts[2], parts[3]
+            if iterations != PASSWORD_HASH_ITERATIONS:
+                return False
+        elif len(parts) == 2:
+            iterations = LEGACY_PASSWORD_HASH_ITERATIONS
+            salt, expected_hash = parts
+        else:
+            return False
         calc_hash = hashlib.pbkdf2_hmac(
             'sha256',
             password.encode('utf-8'),
             salt.encode('utf-8'),
-            iterations=100000
+            iterations=iterations
         ).hex()
-        return secrets.compare_digest(calc_hash, expected_hash)
-    except Exception:
+        return hmac.compare_digest(calc_hash, expected_hash)
+    except (AttributeError, TypeError, ValueError, OverflowError):
         return False
 
 
@@ -104,37 +115,37 @@ def execute_insert(query: str, params: tuple = ()) -> int:
 # USERS
 # =====================================================================
 
-def create_user(full_name: str, mobile: str, email: str, village: str,
+def create_user(full_name: str, username: str, mobile: str, email: str, village: str,
                 address: str, password: str, role: str = "villager") -> int:
     """Creates a new user record with securely hashed password."""
     pw_hash = hash_password(password)
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sql = """
-        INSERT INTO users (full_name, mobile, email, village, address, password_hash, role, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (full_name, username, mobile, email, village, address, password_hash, role, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
-    return execute_insert(sql, (full_name.strip(), mobile.strip(), (email or "").strip().lower() or None,
+    return execute_insert(sql, (full_name.strip(), username.strip().lower(), mobile.strip(), email.strip().lower(),
                                 village.strip(), address.strip(), pw_hash, role, created_at))
 
 
 def get_user_by_id(user_id: int) -> dict:
     """Fetches user record without password hash."""
-    sql = "SELECT id, full_name, mobile, email, village, address, role, created_at FROM users WHERE id = ?"
+    sql = "SELECT id, full_name, username, mobile, email, village, address, role, created_at FROM users WHERE id = ?"
     return query_one(sql, (user_id,))
 
 
 def get_user_by_login(identifier: str) -> dict:
     """
-    Finds a user by email or mobile phone. Includes password_hash for auth validation.
+    Finds a user by username, email, or mobile phone. Includes password_hash for auth validation.
     """
     identifier_clean = identifier.strip().lower()
-    sql = "SELECT * FROM users WHERE LOWER(email) = ? OR mobile = ?"
-    return query_one(sql, (identifier_clean, identifier.strip()))
+    sql = "SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ? OR mobile = ?"
+    return query_one(sql, (identifier_clean, identifier_clean, identifier.strip()))
 
 
 def get_all_users() -> list:
     """Returns all users without password hashes."""
-    sql = "SELECT id, full_name, mobile, email, village, address, role, created_at FROM users ORDER BY id ASC"
+    sql = "SELECT id, full_name, username, mobile, email, village, address, role, created_at FROM users ORDER BY id ASC"
     return query_all(sql)
 
 

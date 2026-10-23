@@ -14,7 +14,7 @@ HOST = "127.0.0.1"
 PORT = 8000
 
 # Database settings
-DATABASE_PATH = BASE_DIR / "village_system.db"
+DATABASE_PATH = Path(os.getenv("GRAMSEVA_DATABASE_PATH", str(BASE_DIR / "village_system.db")))
 SCHEMA_PATH = BASE_DIR / "database" / "schema.sql"
 SEED_PATH = BASE_DIR / "database" / "seed.sql"
 
@@ -27,6 +27,13 @@ ASSETS_DIR = BASE_DIR / "assets"
 # Session settings
 SESSION_COOKIE_NAME = "village_session_id"
 SESSION_LIFETIME_SECONDS = 86400  # 24 hours
+
+# Optional one-time administrator bootstrap for a fresh database.
+ADMIN_USERNAME = os.getenv("GRAMSEVA_ADMIN_USERNAME", "").strip()
+ADMIN_NAME = os.getenv("GRAMSEVA_ADMIN_NAME", "").strip()
+ADMIN_EMAIL = os.getenv("GRAMSEVA_ADMIN_EMAIL", "").strip().lower()
+ADMIN_MOBILE = os.getenv("GRAMSEVA_ADMIN_MOBILE", "").strip()
+ADMIN_PASSWORD = os.getenv("GRAMSEVA_ADMIN_PASSWORD", "")
 
 # Priority levels and corresponding weights for Priority Queue
 # Lower numerical value indicates higher priority (Emergency is highest rank: 1)

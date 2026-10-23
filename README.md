@@ -147,7 +147,7 @@ The SQLite database comprises 6 relational tables with foreign keys and indexes:
 | Method | Endpoint | Description | Access |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/register` | Register a new villager | Public |
-| `POST` | `/api/login` | Authenticate using email/mobile & password | Public |
+| `POST` | `/api/login` | Authenticate using email, User ID, or mobile & password | Public |
 | `POST` | `/api/logout` | Terminate session and clear cookie | Public |
 | `GET` | `/api/session` | Fetch active user session information | Public |
 | `GET` | `/api/resources` | List all resources (optional `?category=`) | Public |
@@ -180,7 +180,8 @@ cd Village_Resource_Grievance_System
 ```
 
 ### Step 2: Initialize Database
-Run the automated initialization script. This sets up the SQLite schema, indexes, demo accounts, and sample data:
+Run the automated initialization script. It applies the SQLite schema and safe
+user-table migration, initializes village resources, and loads sample records:
 ```bash
 python setup_database.py
 ```
@@ -208,7 +209,7 @@ HTTP handler can run as a Vercel Python function.
 2. Open [vercel.com](https://vercel.com) and select **Add New Project**.
 3. Import the GitHub repository.
 4. Keep the project root as the repository root.
-5. Click **Deploy**. No build command or environment variable is required for the demo.
+5. Configure administrator environment variables as described below, then deploy.
 
 ### Deploy with the Vercel CLI
 
@@ -221,43 +222,57 @@ vercel --prod
 
 ### Vercel limitations
 
-- SQLite is initialized in `/tmp`, which is temporary storage. Data can be lost when
-   the serverless function is restarted or moved to another instance.
+- SQLite defaults to `/tmp`, which is temporary storage on Vercel. Account, grievance,
+   and resource data can be lost when the serverless function is restarted or moved to
+   another instance. Vercel deployments requiring persistence must use an external
+   persistent database or a platform with a durable mounted volume; a local SQLite
+   file on Vercel is not durable.
+- On a server that provides a durable mounted volume, set `GRAMSEVA_DATABASE_PATH`
+   to a database file on that volume before running `python setup_database.py`.
 - Sessions are stored in memory and are not shared between function instances.
-- For a real production deployment, move the database to a hosted database such as
-   PostgreSQL and store sessions in a shared service such as Redis.
+- For production, use a hosted database such as PostgreSQL and store sessions in a
+  shared service such as Redis.
 
 ---
 
-## 🔑 10. Demo Login Credentials
+## 🔐 10. Accounts and administrator setup
 
-For testing and presentation evaluation, the following demo accounts are pre-configured:
+Residents can create accounts from **Register as Villager**. Each registration
+requires a unique User ID, email address, and 10-digit mobile number. New
+registrations always receive the `villager` role; the role selector on the login
+page does not grant privileges.
 
-### 👑 Administrator Account
-- **Role:** `Admin`
-- **Email:** `admin@village.local`
-- **Mobile:** `9876543210`
-- **Password:** `Admin@123`
-- *Access:* Full administrative dashboard (`admin.html`), Priority Queue view, FIFO Queue view, status updates, department assignments, resource/announcement CRUD.
+Administrator accounts are not created by public registration. Configure all
+of the following environment variables before running `python setup_database.py`
+to create an initial administrator or rotate the configured administrator in an
+existing database:
 
-### 🧑‍🌾 Villager / Citizen Account 1
-- **Role:** `Villager`
-- **Email:** `ramesh@village.local`
-- **Mobile:** `9822011223`
-- **Password:** `Villager@123`
-- *Access:* Villager dashboard (`dashboard.html`), file grievances, track personal issues.
+- `GRAMSEVA_ADMIN_USERNAME`
+- `GRAMSEVA_ADMIN_NAME`
+- `GRAMSEVA_ADMIN_EMAIL`
+- `GRAMSEVA_ADMIN_MOBILE`
+- `GRAMSEVA_ADMIN_PASSWORD` (at least 8 characters)
 
-### 🧑‍🌾 Villager / Citizen Account 2
-- **Role:** `Villager`
-- **Email:** `sunita@village.local`
-- **Mobile:** `9822011224`
-- **Password:** `Villager@123`
+Supply the administrator password through the deployment's secret manager; do
+not put it in source control or frontend code. Existing administrator records in
+an older database are retained; when the configured username, email, and mobile
+identify an existing administrator, setup updates that account's profile and
+password hash from the configured values. Existing sample villager records
+remain only as sample data; they are not required for public registration.
+
+The migration adds User IDs to existing accounts and creates unique indexes for
+User IDs and case-insensitive email addresses. Back up `village_system.db` before
+upgrading, then run `python setup_database.py` once; existing user and grievance
+records are retained. Set `GRAMSEVA_DATABASE_PATH` first if the database is not
+at the default project path.
 
 ---
 
 ## 🧪 11. Automated Testing
 
-To run the automated backend test suite covering database schema, password hashing, authentication, FIFO Queue, Min-Heap Priority Queue, searching, and sorting:
+To run the automated backend test suite covering database schema, password hashing,
+registration and login by all supported identifiers, duplicate rejection, role
+separation, FIFO Queue, Min-Heap Priority Queue, searching, and sorting:
 
 ```bash
 python test_backend.py
@@ -265,7 +280,7 @@ python test_backend.py
 
 Expected output:
 ```
-Ran 12 tests in 0.39s
+Ran 14 tests in approximately 1s
 OK
 ```
 

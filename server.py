@@ -11,6 +11,8 @@ import time
 import secrets
 import mimetypes
 import threading
+import re
+import sqlite3
 from pathlib import Path
 from http import cookies
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -502,85 +504,123 @@ class VillageAppHandler(BaseHTTPRequestHandler):
     # API: POST HANDLER
     # =====================================================================
 
+    def handle_api_registration(self, body: dict):
+        if not isinstance(body, dict):
+            self.send_error_json("Registration details must be a JSON object.", status=400)
+            return
+
+        required_fields = ("full_name", "username", "email", "mobile", "village", "password", "confirm_password")
+        if any(not isinstance(body.get(field), str) for field in required_fields):
+            self.send_error_json("Please provide all required registration fields.", status=400)
+            return
+
+        full_name = body["full_name"].strip()
+        username = body["username"].strip().lower()
+        email = body["email"].strip().lower()
+        mobile = body["mobile"].strip()
+        village = body["village"].strip()
+        address = body.get("address", "")
+        password = body["password"]
+        confirm_password = body["confirm_password"]
+
+        if not isinstance(address, str):
+            self.send_error_json("Address must be text.", status=400)
+            return
+        if not all((full_name, username, email, mobile, village, password, confirm_password)):
+            self.send_error_json("Please complete all required registration fields.", status=400)
+            return
+        if not re.fullmatch(r"[a-z][a-z0-9_.-]{2,29}", username):
+            self.send_error_json(
+                "User ID must be 3-30 characters, start with a letter, and contain only letters, numbers, dots, underscores, or hyphens.",
+                status=400,
+            )
+            return
+        email_pattern = (
+            r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+            r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+            r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+"
+        )
+        if len(email) > 254 or not re.fullmatch(email_pattern, email):
+            self.send_error_json("Please provide a valid email address.", status=400)
+            return
+        if not re.fullmatch(r"[0-9]{10}", mobile):
+            self.send_error_json("Mobile number must contain exactly 10 digits.", status=400)
+            return
+        if password != confirm_password:
+            self.send_error_json("Passwords do not match.", status=400)
+            return
+        if len(password) < 8 or len(password) > 128:
+            self.send_error_json("Password must be between 8 and 128 characters long.", status=400)
+            return
+        if any(database.get_user_by_login(value) for value in (username, email, mobile)):
+            self.send_error_json(
+                "An account with this User ID, email address, or mobile number already exists.",
+                status=409,
+            )
+            return
+
+        try:
+            new_user_id = database.create_user(
+                full_name=full_name,
+                username=username,
+                mobile=mobile,
+                email=email,
+                village=village,
+                address=address,
+                password=password,
+                role="villager",
+            )
+        except sqlite3.IntegrityError:
+            self.send_error_json(
+                "An account with this User ID, email address, or mobile number already exists.",
+                status=409,
+            )
+            return
+
+        self.send_json({
+            "success": True,
+            "message": "Registration successful! You may now log in.",
+            "user_id": new_user_id,
+        }, status=201)
+
     def handle_api_post(self, path: str, body: dict):
         user = self.get_current_user()
 
-        # -------------------------------------------------------------
-        # 1. User Registration
-        # -------------------------------------------------------------
         if path == "/api/register":
-            full_name = body.get("full_name", "").strip()
-            mobile = body.get("mobile", "").strip()
-            email = body.get("email", "").strip()
-            village = body.get("village", "").strip()
-            address = body.get("address", "").strip()
-            password = body.get("password", "")
-            confirm_password = body.get("confirm_password", "")
-
-            # Validation
-            if not full_name or not mobile or not village or not password:
-                self.send_error_json("Full Name, Mobile, Village, and Password are required fields.", status=400)
-                return
-
-            if len(mobile) < 10 or not mobile.replace("+", "").isdigit():
-                self.send_error_json("Please provide a valid 10-digit mobile number.", status=400)
-                return
-
-            if confirm_password and password != confirm_password:
-                self.send_error_json("Passwords do not match.", status=400)
-                return
-
-            if len(password) < 6:
-                self.send_error_json("Password must be at least 6 characters long.", status=400)
-                return
-
-            # Duplicate check
-            existing = database.get_user_by_login(mobile)
-            if not existing and email:
-                existing = database.get_user_by_login(email)
-            if existing:
-                self.send_error_json("An account with this mobile number or email already exists.", status=400)
-                return
-
-            try:
-                new_user_id = database.create_user(
-                    full_name=full_name,
-                    mobile=mobile,
-                    email=email,
-                    village=village,
-                    address=address,
-                    password=password,
-                    role="villager"
-                )
-                self.send_json({
-                    "success": True,
-                    "message": "Registration successful! You may now log in.",
-                    "user_id": new_user_id
-                }, status=201)
-            except Exception as e:
-                self.send_error_json(f"Registration error: {str(e)}", status=500)
+            self.handle_api_registration(body)
             return
 
         # -------------------------------------------------------------
         # 2. User Login
         # -------------------------------------------------------------
         if path == "/api/login":
-            identifier = body.get("identifier", "").strip()
+            if not isinstance(body, dict):
+                self.send_error_json("Login details must be a JSON object.", status=400)
+                return
+
+            identifier = body.get("identifier", "")
             password = body.get("password", "")
-            requested_role = body.get("role", "villager").strip().lower()
+            requested_role = body.get("role", "villager")
+            if not all(isinstance(value, str) for value in (identifier, password, requested_role)):
+                self.send_error_json("Please provide a valid login identifier, password, and account type.", status=400)
+                return
+            identifier = identifier.strip()
+            requested_role = requested_role.strip().lower()
 
             if not identifier or not password:
-                self.send_error_json("Please provide both email/mobile and password.", status=400)
+                self.send_error_json("Please provide your email, User ID, or mobile number and password.", status=400)
+                return
+            if requested_role not in ("villager", "admin"):
+                self.send_error_json("Please select a valid account type.", status=400)
                 return
 
             account = database.get_user_by_login(identifier)
             if not account or not database.verify_password(password, account["password_hash"]):
-                self.send_error_json("Invalid credentials. Please verify your email/mobile and password.", status=401)
+                self.send_error_json("Invalid credentials. Please verify your login ID and password.", status=401)
                 return
 
-            # Verify role requirement
-            if requested_role == "admin" and account["role"] != "admin":
-                self.send_error_json("Access denied: You do not possess administrative privileges.", status=403)
+            if requested_role != account["role"]:
+                self.send_error_json("Access denied: the selected account type does not match this account.", status=403)
                 return
 
             # Generate session token
@@ -598,6 +638,7 @@ class VillageAppHandler(BaseHTTPRequestHandler):
             user_safe = {
                 "id": account["id"],
                 "full_name": account["full_name"],
+                "username": account["username"],
                 "mobile": account["mobile"],
                 "email": account["email"],
                 "village": account["village"],

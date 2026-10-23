@@ -16,7 +16,9 @@
         <span>GramSeva</span>
       </a>
 
-      <ul class="nav-links">
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">&#9776;</button>
+
+      <ul class="nav-links" id="nav-links">
         <li><a href="index.html" data-i18n="nav_home">Home</a></li>
         <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
         <li><a href="grievance.html" data-i18n="nav_grievance">Report Grievance</a></li>
@@ -59,9 +61,9 @@
         <input type="hidden" id="role-input" value="villager">
 
         <div class="form-group">
-          <label class="form-label" for="login-identifier">Email Address or Mobile Number</label>
-          <input type="text" id="login-identifier" class="form-control" placeholder="e.g. admin@village.local or 9822011223" required autofocus>
-          <div class="form-help">Registered email address or 10-digit mobile number.</div>
+          <label class="form-label" for="login-identifier">Email Address, User ID, or Mobile Number</label>
+          <input type="text" id="login-identifier" class="form-control" placeholder="Enter your email, User ID, or 10-digit mobile" required autofocus autocomplete="username">
+          <div class="form-help">Use the email address, User ID, or 10-digit mobile number registered to your account.</div>
         </div>
 
         <div class="form-group">
@@ -80,22 +82,6 @@
         Don't have an account yet? <a href="register.html" style="font-weight:600;">Register as Villager</a>
       </div>
 
-      <!-- Demo Credentials Quick Helper Card -->
-      <div style="margin-top: 2rem; padding: 1rem; background-color: var(--surface-alt); border: 1px dashed var(--border); border-radius: var(--radius-md); font-size: 0.85rem;">
-        <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--text-main);">Demo Credentials for Evaluation:</div>
-        <div style="margin-bottom: 0.4rem;">
-          <span class="user-role-badge role-admin">Admin</span>
-          <a href="javascript:void(0)" onclick="fillCredentials('admin@village.local', 'Admin@123', 'admin')" style="margin-left: 0.5rem; font-weight:600;">
-            admin@village.local / Admin@123
-          </a>
-        </div>
-        <div>
-          <span class="user-role-badge role-villager">Villager</span>
-          <a href="javascript:void(0)" onclick="fillCredentials('ramesh@village.local', 'Villager@123', 'villager')" style="margin-left: 0.5rem; font-weight:600;">
-            ramesh@village.local / Villager@123
-          </a>
-        </div>
-      </div>
     </div>
   </main>
 
@@ -125,12 +111,6 @@
         villagerBtn.style.boxShadow = "none";
         villagerBtn.style.color = "var(--text-muted)";
       }
-    }
-
-    function fillCredentials(id, pass, role) {
-      selectRole(role);
-      document.getElementById("login-identifier").value = id;
-      document.getElementById("login-password").value = pass;
     }
 
     document.getElementById("login-form").addEventListener("submit", async (e) => {

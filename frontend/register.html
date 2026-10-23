@@ -16,7 +16,9 @@
         <span>GramSeva</span>
       </a>
 
-      <ul class="nav-links">
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">&#9776;</button>
+
+      <ul class="nav-links" id="nav-links">
         <li><a href="index.html" data-i18n="nav_home">Home</a></li>
         <li><a href="resources.html" data-i18n="nav_resources">Resources</a></li>
         <li><a href="grievance.html" data-i18n="nav_grievance">Report Grievance</a></li>
@@ -51,15 +53,21 @@
           <input type="text" id="reg-name" class="form-control" placeholder="e.g. Ramesh Patil" required>
         </div>
 
+        <div class="form-group">
+          <label class="form-label" for="reg-username">Unique User ID <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="reg-username" class="form-control" placeholder="e.g. ramesh.patil" required minlength="3" maxlength="30" pattern="[A-Za-z][A-Za-z0-9_.\x2d]{2,29}" autocomplete="username">
+          <div class="form-help">3-30 characters; start with a letter and use letters, numbers, dots, underscores, or hyphens.</div>
+        </div>
+
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label" for="reg-mobile">Mobile Number <span style="color:var(--danger)">*</span></label>
-            <input type="tel" id="reg-mobile" class="form-control" placeholder="10-digit mobile (e.g. 9822011223)" required pattern="[0-9]{10}">
+            <input type="tel" id="reg-mobile" class="form-control" placeholder="10-digit mobile (e.g. 9822011223)" required pattern="[0-9]{10}" maxlength="10" inputmode="numeric" autocomplete="tel">
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="reg-email">Email Address (Optional)</label>
-            <input type="email" id="reg-email" class="form-control" placeholder="e.g. ramesh@village.local">
+            <label class="form-label" for="reg-email">Email Address <span style="color:var(--danger)">*</span></label>
+            <input type="email" id="reg-email" class="form-control" placeholder="e.g. ramesh@example.com" required autocomplete="email">
           </div>
         </div>
 
@@ -78,12 +86,12 @@
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label" for="reg-password">Password <span style="color:var(--danger)">*</span></label>
-            <input type="password" id="reg-password" class="form-control" placeholder="Minimum 6 characters" required minlength="6">
+            <input type="password" id="reg-password" class="form-control" placeholder="Minimum 8 characters" required minlength="8" maxlength="128" autocomplete="new-password">
           </div>
 
           <div class="form-group">
             <label class="form-label" for="reg-confirm-password">Confirm Password <span style="color:var(--danger)">*</span></label>
-            <input type="password" id="reg-confirm-password" class="form-control" placeholder="Re-type password" required minlength="6">
+            <input type="password" id="reg-confirm-password" class="form-control" placeholder="Re-type password" required minlength="8" maxlength="128" autocomplete="new-password">
           </div>
         </div>
 
@@ -110,6 +118,7 @@
       alertBox.style.display = "none";
 
       const full_name = document.getElementById("reg-name").value.trim();
+      const username = document.getElementById("reg-username").value.trim();
       const mobile = document.getElementById("reg-mobile").value.trim();
       const email = document.getElementById("reg-email").value.trim();
       const village = document.getElementById("reg-village").value.trim();
@@ -117,20 +126,25 @@
       const password = document.getElementById("reg-password").value;
       const confirm_password = document.getElementById("reg-confirm-password").value;
 
-      // Basic client-side validation
-      if (password !== confirm_password) {
+      const showError = (message) => {
         alertBox.style.display = "block";
         alertBox.style.backgroundColor = "var(--danger-light)";
         alertBox.style.color = "var(--danger)";
-        alertBox.textContent = "Passwords do not match. Please verify and retype.";
+        alertBox.textContent = message;
+      };
+
+      if (password !== confirm_password) {
+        showError("Passwords do not match. Please verify and retype.");
         return;
       }
 
-      if (mobile.length !== 10 || !/^\d+$/.test(mobile)) {
-        alertBox.style.display = "block";
-        alertBox.style.backgroundColor = "var(--danger-light)";
-        alertBox.style.color = "var(--danger)";
-        alertBox.textContent = "Please enter a valid 10-digit mobile number.";
+      if (!/^\d{10}$/.test(mobile)) {
+        showError("Please enter a valid 10-digit mobile number.");
+        return;
+      }
+
+      if (password.length < 8 || password.length > 128) {
+        showError("Password must be between 8 and 128 characters long.");
         return;
       }
 
@@ -143,6 +157,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             full_name,
+            username,
             mobile,
             email,
             village,
@@ -165,18 +180,12 @@
             window.location.href = "login.html";
           }, 1200);
         } else {
-          alertBox.style.display = "block";
-          alertBox.style.backgroundColor = "var(--danger-light)";
-          alertBox.style.color = "var(--danger)";
-          alertBox.textContent = data.error || "Registration failed. Please check your information.";
+          showError(data.error || "Registration failed. Please check your information.");
           submitBtn.disabled = false;
           submitBtn.textContent = "Create Account";
         }
       } catch (err) {
-        alertBox.style.display = "block";
-        alertBox.style.backgroundColor = "var(--danger-light)";
-        alertBox.style.color = "var(--danger)";
-        alertBox.textContent = "Unable to connect to server. Please try again.";
+        showError("Unable to connect to server. Please try again.");
         submitBtn.disabled = false;
         submitBtn.textContent = "Create Account";
       }

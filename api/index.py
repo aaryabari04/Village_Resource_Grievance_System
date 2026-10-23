@@ -17,9 +17,14 @@ sys.path.insert(0, str(BASE_DIR))
 
 import config
 
-# Vercel functions cannot write to the project directory. Keep the demo database
-# in /tmp and initialize it on a fresh function instance.
-config.DATABASE_PATH = Path(tempfile.gettempdir()) / "gramseva-village-system.db"
+# Vercel functions cannot write to the project directory. The default /tmp
+# database is ephemeral; deployments must configure a durable database backend.
+config.DATABASE_PATH = Path(
+    os.environ.get(
+        "GRAMSEVA_DATABASE_PATH",
+        str(Path(tempfile.gettempdir()) / "gramseva-village-system.db"),
+    )
+)
 
 import server
 

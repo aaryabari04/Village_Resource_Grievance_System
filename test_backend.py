@@ -15,6 +15,7 @@ import os
 import sys
 import unittest
 import sqlite3
+import hashlib
 from pathlib import Path
 
 # Add project root to path
@@ -23,6 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
 import database
+import server
 from data_structures import (
     GrievanceQueue,
     GrievancePriorityQueue,
@@ -32,6 +34,26 @@ from data_structures import (
     sort_grievances_by_date,
     sort_grievances_by_status
 )
+
+
+class CapturedAPIHandler(server.VillageAppHandler):
+    """Run API routes directly and retain their JSON response for assertions."""
+
+    def get_current_user(self):
+        return None
+
+    def get_session_token(self):
+        return getattr(self, "session_token", "")
+
+    def send_json(self, data, status=200, set_cookies=None):
+        self.response = {"data": data, "status": status, "cookies": set_cookies or []}
+
+    def send_error_json(self, message, status=400, details=None):
+        self.response = {
+            "data": {"success": False, "error": message, "status": status},
+            "status": status,
+            "cookies": [],
+        }
 
 
 class TestVillageSystem(unittest.TestCase):
@@ -53,11 +75,13 @@ class TestVillageSystem(unittest.TestCase):
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [row["name"] for row in cursor.fetchall()]
-        conn.close()
 
         expected_tables = ["users", "departments", "resources", "grievances", "announcements", "grievance_updates"]
         for table in expected_tables:
             self.assertIn(table, tables, f"Expected table '{table}' not found in database.")
+        user_columns = {row["name"] for row in cursor.execute("PRAGMA table_info(users)")}
+        self.assertIn("username", user_columns)
+        conn.close()
 
     def test_password_hashing_and_verification(self):
         """Test PBKDF2-HMAC-SHA256 password hashing security."""
@@ -74,27 +98,86 @@ class TestVillageSystem(unittest.TestCase):
         # Verification failure with incorrect password
         self.assertFalse(database.verify_password("WrongPassword999", hashed))
 
+        legacy_salt = "legacy-salt"
+        legacy_hash = hashlib.pbkdf2_hmac(
+            "sha256", raw_password.encode("utf-8"), legacy_salt.encode("utf-8"), 100_000
+        ).hex()
+        self.assertTrue(database.verify_password(raw_password, f"{legacy_salt}${legacy_hash}"))
+
+    def test_legacy_user_schema_migration_preserves_users(self):
+        from setup_database import migrate_user_schema
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                full_name TEXT NOT NULL,
+                mobile TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE,
+                village TEXT NOT NULL,
+                address TEXT,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute(
+            "INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (41, "Legacy Resident", "9000000001", "legacy.resident@example.com", "Sundarpur",
+             "", "old-hash", "villager", "2025-01-01 00:00:00"),
+        )
+        migrate_user_schema(conn)
+        migrate_user_schema(conn)
+
+        user = conn.execute("SELECT id, username, email FROM users WHERE id = 41").fetchone()
+        self.assertEqual(user["username"], "legacy.resident")
+        self.assertEqual(user["email"], "legacy.resident@example.com")
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO users (id, full_name, username, mobile, email, village, address, password_hash, role, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (42, "Duplicate Resident", "LEGACY.RESIDENT", "9000000002",
+                 "duplicate@example.com", "Sundarpur", "", "hash", "villager", "2025-01-02"),
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO users (id, full_name, username, mobile, email, village, address, password_hash, role, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (43, "Duplicate Email", "another_resident", "9000000003",
+                 "LEGACY.RESIDENT@example.com", "Sundarpur", "", "hash", "villager", "2025-01-03"),
+            )
+        conn.close()
+
     # =================================================================
     # 2. USER AUTHENTICATION & REGISTRATION
     # =================================================================
 
-    def test_admin_demo_account_exists(self):
-        """Verify demo admin account is properly seeded and password verifies."""
-        admin = database.get_user_by_login("admin@village.local")
-        self.assertIsNotNone(admin, "Demo admin account admin@village.local should exist.")
-        self.assertEqual(admin["role"], "admin")
-        self.assertTrue(database.verify_password("Admin@123", admin["password_hash"]))
+    def post_api(self, path, body):
+        handler = object.__new__(CapturedAPIHandler)
+        handler.response = None
+        handler.handle_api_post(path, body)
+        return handler.response
 
     def test_user_registration_and_duplicate_prevention(self):
-        """Test creating a new villager and preventing duplicate phone numbers."""
+        """Test creating a villager and rejecting repeated login identifiers."""
         test_mobile = "9998887711"
         test_email = "testvillager@village.local"
 
         # Cleanup if previously exists from prior run
-        database.execute_commit("DELETE FROM users WHERE mobile = ? OR email = ?", (test_mobile, test_email))
+        database.execute_commit(
+            "DELETE FROM users WHERE username = ? OR mobile = ? OR email = ?",
+            ("kavita_test", test_mobile, test_email),
+        )
+        self.addCleanup(
+            database.execute_commit,
+            "DELETE FROM users WHERE username = ? OR mobile = ? OR email = ?",
+            ("kavita_test", test_mobile, test_email),
+        )
 
         user_id = database.create_user(
             full_name="Kavita Rane",
+            username="kavita_test",
             mobile=test_mobile,
             email=test_email,
             village="Sundarpur",
@@ -113,6 +196,7 @@ class TestVillageSystem(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             database.create_user(
                 full_name="Duplicate User",
+                username="another_user",
                 mobile=test_mobile,
                 email="another@village.local",
                 village="Sundarpur",
@@ -121,6 +205,165 @@ class TestVillageSystem(unittest.TestCase):
                 role="villager"
             )
 
+        with self.assertRaises(sqlite3.IntegrityError):
+            database.create_user(
+                full_name="Duplicate User",
+                username="kavita_test",
+                mobile="9998887712",
+                email="another@village.local",
+                village="Sundarpur",
+                address="Somewhere",
+                password="SecurePassword123",
+                role="villager",
+            )
+
+    def test_registration_login_validation_and_admin_separation(self):
+        username = "api_new_villager"
+        email = "api.new.villager@example.com"
+        mobile = "9198765432"
+        password = "StrongPassphrase42"
+        database.execute_commit(
+            "DELETE FROM users WHERE username IN (?, ?)",
+            (username, "api_test_admin"),
+        )
+        self.addCleanup(
+            database.execute_commit,
+            "DELETE FROM users WHERE username IN (?, ?)",
+            (username, "api_test_admin"),
+        )
+        registration = {
+            "full_name": "New Villager",
+            "username": username,
+            "email": email,
+            "mobile": mobile,
+            "village": "Sundarpur",
+            "address": "Ward 4",
+            "password": password,
+            "confirm_password": password,
+            "role": "admin",
+        }
+
+        result = self.post_api("/api/register", registration)
+        self.assertEqual(result["status"], 201)
+        new_user = database.get_user_by_id(result["data"]["user_id"])
+        self.assertEqual(new_user["role"], "villager")
+        self.assertEqual(new_user["username"], username)
+        stored_user = database.get_user_by_login(email)
+        self.assertNotIn(password, stored_user["password_hash"])
+
+        login_responses = []
+        for identifier in (email, username, mobile):
+            response = self.post_api(
+                "/api/login",
+                {"identifier": identifier, "password": password, "role": "villager"},
+            )
+            self.assertEqual(response["status"], 200)
+            self.assertEqual(response["data"]["user"]["id"], new_user["id"])
+            login_responses.append(response)
+
+        self.assertEqual(
+            self.post_api(
+                "/api/login",
+                {"identifier": email, "password": "IncorrectPassword42", "role": "villager"},
+            )["status"],
+            401,
+        )
+        self.assertEqual(
+            self.post_api(
+                "/api/login",
+                {"identifier": email, "password": password, "role": "admin"},
+            )["status"],
+            403,
+        )
+
+        for changed_field in ("username", "email", "mobile"):
+            duplicate = dict(registration)
+            duplicate[changed_field] = registration[changed_field].upper() if changed_field != "mobile" else mobile
+            self.assertEqual(self.post_api("/api/register", duplicate)["status"], 409)
+
+        invalid_mobile = dict(registration, username="api_bad_mobile", email="bad.mobile@example.com", mobile="12345")
+        self.assertEqual(self.post_api("/api/register", invalid_mobile)["status"], 400)
+        invalid_email = dict(registration, username="api_bad_email", email="not-an-email",
+                             mobile="9198765435")
+        self.assertEqual(self.post_api("/api/register", invalid_email)["status"], 400)
+        missing_user_id = dict(registration)
+        del missing_user_id["username"]
+        self.assertEqual(self.post_api("/api/register", missing_user_id)["status"], 400)
+        mismatched = dict(registration, username="api_bad_password", email="bad.password@example.com",
+                          mobile="9198765433", confirm_password="NotTheSamePassword")
+        self.assertEqual(self.post_api("/api/register", mismatched)["status"], 400)
+
+        admin_password = "AdminTestPassphrase42"
+        database.create_user(
+            full_name="Test Administrator",
+            username="api_test_admin",
+            mobile="9198765434",
+            email="api.test.admin@example.com",
+            village="Sundarpur",
+            address="",
+            password=admin_password,
+            role="admin",
+        )
+        admin_login = self.post_api(
+            "/api/login",
+            {"identifier": "api_test_admin", "password": admin_password, "role": "admin"},
+        )
+        self.assertEqual(admin_login["status"], 200)
+        self.assertEqual(admin_login["data"]["user"]["role"], "admin")
+
+        for login_response in login_responses:
+            logout_handler = object.__new__(CapturedAPIHandler)
+            logout_handler.session_token = login_response["data"]["token"]
+            logout_handler.handle_api_post("/api/logout", {})
+            self.assertTrue(logout_handler.response["data"]["success"])
+        self.assertIsNotNone(database.get_user_by_login(username))
+        database.execute_commit("DELETE FROM users WHERE username IN (?, ?)", (username, "api_test_admin"))
+
+    def test_configured_admin_credentials_rotate_existing_account(self):
+        from setup_database import seed_configured_admin
+
+        settings = (
+            "ADMIN_USERNAME",
+            "ADMIN_NAME",
+            "ADMIN_EMAIL",
+            "ADMIN_MOBILE",
+            "ADMIN_PASSWORD",
+        )
+        previous_settings = {name: getattr(config, name) for name in settings}
+
+        def restore_settings():
+            for name, value in previous_settings.items():
+                setattr(config, name, value)
+
+        self.addCleanup(restore_settings)
+        self.addCleanup(
+            database.execute_commit,
+            "DELETE FROM users WHERE username = ?",
+            ("rotation_admin",),
+        )
+        database.execute_commit("DELETE FROM users WHERE username = ?", ("rotation_admin",))
+        database.create_user(
+            full_name="Old Administrator",
+            username="rotation_admin",
+            mobile="9000000096",
+            email="rotation.admin@example.com",
+            village="Sundarpur",
+            address="",
+            password="OldAdminPassword42",
+            role="admin",
+        )
+
+        config.ADMIN_USERNAME = "rotation_admin"
+        config.ADMIN_NAME = "Rotated Administrator"
+        config.ADMIN_EMAIL = "rotation.admin@example.com"
+        config.ADMIN_MOBILE = "9000000096"
+        config.ADMIN_PASSWORD = "NewAdminPassword42"
+        seed_configured_admin()
+
+        admin = database.get_user_by_login("rotation_admin")
+        self.assertEqual(admin["full_name"], "Rotated Administrator")
+        self.assertTrue(database.verify_password("NewAdminPassword42", admin["password_hash"]))
+        self.assertFalse(database.verify_password("OldAdminPassword42", admin["password_hash"]))
     # =================================================================
     # 3. RESOURCES & MULTI-ATTRIBUTE SEARCH
     # =================================================================
@@ -186,7 +429,7 @@ class TestVillageSystem(unittest.TestCase):
             priority="High",
             department_id=6,  # Sanitation
             comment="Verified on site. Upgraded priority to High.",
-            updated_by=admin["id"]
+            updated_by=admin["id"] if admin else None
         )
         self.assertTrue(updated)
 
