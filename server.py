@@ -10,9 +10,7 @@ import json
 import time
 import secrets
 import mimetypes
-import threading
 import re
-import sqlite3
 from pathlib import Path
 from http import cookies
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -34,12 +32,6 @@ from data_structures import (
     sort_grievances_by_date,
     sort_grievances_by_status
 )
-
-# Thread-safe in-memory session store
-# Schema: { session_token: { "user_id": int, "role": str, "expires": float } }
-SESSIONS = {}
-SESSION_LOCK = threading.Lock()
-
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Multi-threaded HTTP Server handling concurrent requests cleanly."""
@@ -135,19 +127,20 @@ class VillageAppHandler(BaseHTTPRequestHandler):
         if not token:
             return None
 
-        with SESSION_LOCK:
-            session_info = SESSIONS.get(token)
-            if not session_info:
-                return None
+        session_info = database.get_session(token)
+        if not session_info:
+            return None
+        return database.get_user_by_id(session_info["user_id"])
 
-            # Check expiration
-            if time.time() > session_info.get("expires", 0):
-                del SESSIONS[token]
-                return None
-
-            user_id = session_info.get("user_id")
-
-        return database.get_user_by_id(user_id)
+    def log_server_error(self, method: str, path: str, error: Exception):
+        """Log exception type and driver code without request data or credentials."""
+        code = getattr(error, "errno", None)
+        suffix = f" code={code}" if isinstance(code, int) else ""
+        print(
+            f"[ERROR] {method} {path} failed: "
+            f"error_type={type(error).__name__}{suffix}",
+            file=sys.stderr,
+        )
 
     # =====================================================================
     # HTTP METHODS DISPATCHER
@@ -174,7 +167,7 @@ class VillageAppHandler(BaseHTTPRequestHandler):
             else:
                 self.handle_static_files(path)
         except Exception as e:
-            print(f"[ERROR] Exception in GET {path}: {e}", file=sys.stderr)
+            self.log_server_error("GET", path, e)
             self.send_error_json("An unexpected internal server error occurred", status=500)
 
     def do_POST(self):
@@ -191,7 +184,7 @@ class VillageAppHandler(BaseHTTPRequestHandler):
         except ValueError as ve:
             self.send_error_json(str(ve), status=400)
         except Exception as e:
-            print(f"[ERROR] Exception in POST {path}: {e}", file=sys.stderr)
+            self.log_server_error("POST", path, e)
             self.send_error_json("An unexpected internal server error occurred", status=500)
 
     def do_PUT(self):
@@ -208,7 +201,7 @@ class VillageAppHandler(BaseHTTPRequestHandler):
         except ValueError as ve:
             self.send_error_json(str(ve), status=400)
         except Exception as e:
-            print(f"[ERROR] Exception in PUT {path}: {e}", file=sys.stderr)
+            self.log_server_error("PUT", path, e)
             self.send_error_json("An unexpected internal server error occurred", status=500)
 
     def do_DELETE(self):
@@ -222,7 +215,7 @@ class VillageAppHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error_json("Method Not Allowed", status=405)
         except Exception as e:
-            print(f"[ERROR] Exception in DELETE {path}: {e}", file=sys.stderr)
+            self.log_server_error("DELETE", path, e)
             self.send_error_json("An unexpected internal server error occurred", status=500)
 
     # =====================================================================
@@ -570,12 +563,14 @@ class VillageAppHandler(BaseHTTPRequestHandler):
                 password=password,
                 role="villager",
             )
-        except sqlite3.IntegrityError:
-            self.send_error_json(
-                "An account with this User ID, email address, or mobile number already exists.",
-                status=409,
-            )
-            return
+        except Exception as exc:
+            if database.is_integrity_error(exc):
+                self.send_error_json(
+                    "An account with this User ID, email address, or mobile number already exists.",
+                    status=409,
+                )
+                return
+            raise
 
         self.send_json({
             "success": True,
@@ -615,7 +610,12 @@ class VillageAppHandler(BaseHTTPRequestHandler):
                 return
 
             account = database.get_user_by_login(identifier)
-            if not account or not database.verify_password(password, account["password_hash"]):
+            if not account:
+                print("[AUTH] login rejected: reason=account_not_found", file=sys.stderr)
+                self.send_error_json("Invalid credentials. Please verify your login ID and password.", status=401)
+                return
+            if not database.verify_password(password, account["password_hash"]):
+                print("[AUTH] login rejected: reason=password_verification_failed", file=sys.stderr)
                 self.send_error_json("Invalid credentials. Please verify your login ID and password.", status=401)
                 return
 
@@ -625,14 +625,8 @@ class VillageAppHandler(BaseHTTPRequestHandler):
 
             # Generate session token
             token = secrets.token_hex(32)
-            expires_at = time.time() + config.SESSION_LIFETIME_SECONDS
-
-            with SESSION_LOCK:
-                SESSIONS[token] = {
-                    "user_id": account["id"],
-                    "role": account["role"],
-                    "expires": expires_at
-                }
+            expires_at = int(time.time()) + config.SESSION_LIFETIME_SECONDS
+            database.create_session(token, account["id"], expires_at)
 
             # Prepare user object without password hash
             user_safe = {
@@ -646,7 +640,11 @@ class VillageAppHandler(BaseHTTPRequestHandler):
                 "role": account["role"]
             }
 
-            cookie_str = f"{config.SESSION_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={config.SESSION_LIFETIME_SECONDS}"
+            secure_attribute = "; Secure" if config.IS_VERCEL else ""
+            cookie_str = (
+                f"{config.SESSION_COOKIE_NAME}={token}; Path=/; HttpOnly; "
+                f"SameSite=Lax{secure_attribute}; Max-Age={config.SESSION_LIFETIME_SECONDS}"
+            )
 
             self.send_json({
                 "success": True,
@@ -662,10 +660,13 @@ class VillageAppHandler(BaseHTTPRequestHandler):
         if path == "/api/logout":
             token = self.get_session_token()
             if token:
-                with SESSION_LOCK:
-                    SESSIONS.pop(token, None)
+                database.delete_session(token)
 
-            cookie_clear = f"{config.SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+            secure_attribute = "; Secure" if config.IS_VERCEL else ""
+            cookie_clear = (
+                f"{config.SESSION_COOKIE_NAME}=; Path=/; HttpOnly; "
+                f"SameSite=Lax{secure_attribute}; Max-Age=0"
+            )
             self.send_json({
                 "success": True,
                 "message": "Successfully logged out"
@@ -983,18 +984,21 @@ def app(environ, start_response):
 
 def run_server(host: str = config.HOST, port: int = config.PORT):
     """Starts the threaded HTTP server."""
-    # Ensure database is initialized before starting
-    if not config.DATABASE_PATH.exists():
+    if config.DATABASE_BACKEND == "mysql":
+        database.check_connection()
+    elif not config.DATABASE_PATH.exists():
         print("[!] Database file not found. Auto-running database initialization...")
         from setup_database import init_database
         init_database()
+    else:
+        database.ensure_session_table()
 
     server_address = (host, port)
     httpd = ThreadedHTTPServer(server_address, VillageAppHandler)
     print("=" * 65)
     print(f"   Village Resources & Grievance Management System Server")
     print(f"   Running on http://localhost:{port} / http://{host}:{port}")
-    print(f"   Architecture: Vanilla JS -> Python Standard Library -> SQLite")
+    print(f"   Architecture: Vanilla JS -> Python Standard Library -> {config.DATABASE_BACKEND.upper()}")
     print(f"   Press Ctrl+C to stop the server.")
     print("=" * 65)
 

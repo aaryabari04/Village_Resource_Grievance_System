@@ -1,7 +1,8 @@
 # Village Resources & Grievance Management System
 # ===============================================
-# This project is deliberately built using 100% Python Standard Library.
-# NO EXTERNAL PYTHON DEPENDENCIES ARE REQUIRED!
+# The SQLite development/test backend uses only the Python standard library.
+# This driver is required for production MySQL and the SQLite-to-MySQL migrator.
+# Python >= 3.8
 #
 # Standard Library Modules Utilized:
 # - http.server (HTTP server and request handling)
@@ -17,3 +18,5 @@
 #
 # Requirements:
 # Python >= 3.8
+mysql-connector-python>=8.0.33
+python-dotenv>=1.0.1,<2

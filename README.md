@@ -11,7 +11,8 @@ The **Village Resources and Grievance Management System (GramSeva)** is a digita
 - Connect villagers with essential village amenities (health clinics, schools, water supply, public libraries, electricity transformers).
 - Transparent, algorithmic grievance redressal with automated tracking codes (`GRV-YYYY-XXXX`).
 - Multi-language inclusivity with instantaneous support for **English**, **मराठी (Marathi)**, and **हिन्दी (Hindi)**.
-- **100% Python Standard Library backend** with zero external dependencies (no Flask, no Django, no React).
+- **Python backend** with no framework dependency (no Flask, no Django, no React);
+  the production MySQL driver is installed only for database connectivity.
 
 ---
 
@@ -28,13 +29,13 @@ The **Village Resources and Grievance Management System (GramSeva)** is a digita
 │    (ThreadingHTTPServer, Custom Router, PBKDF2 Password Hasher) │
 ├───────────────────────────────┬─────────────────────────────────┤
 │    Authentication & Session   │     Data Structures Engine      │
-│  In-Memory Session Store      │  • FIFO GrievanceQueue          │
+│  Database-backed sessions     │  • FIFO GrievanceQueue          │
 │  Role-Based Access Control    │  • Heapq GrievancePriorityQueue │
 │                               │  • Multi-attribute Search & Sort│
 └───────────────────────────────┴────────────────┬────────────────┘
                                                  │ Parameterized SQL
 ┌────────────────────────────────────────────────▼────────────────┐
-│                       SQLite Database                           │
+│              SQLite locally / MySQL on Vercel                   │
 │   users, resources, departments, grievances, announcements,     │
 │   grievance_updates                                             │
 └─────────────────────────────────────────────────────────────────┘
@@ -45,16 +46,16 @@ The **Village Resources and Grievance Management System (GramSeva)** is a digita
 ## ⚡ 3. Technology Stack
 
 - **Frontend:** HTML5, CSS3 (Modern Responsive Flexbox/Grid, CSS Variables), Vanilla JavaScript (ES6+).
-- **Backend:** Python 3.8+ utilizing **strictly the Python Standard Library**:
+- **Backend:** Python 3.8+:
   - `http.server` & `socketserver` (Multi-threaded HTTP Server)
-  - `sqlite3` (ACID Relational Database Storage)
+  - `sqlite3` for local development; `mysql-connector-python` for production MySQL
   - `hashlib` (PBKDF2-HMAC-SHA256 Password Hashing)
   - `heapq` (Min-Heap Priority Queue)
   - `collections.deque` (FIFO Grievance Intake Queue)
   - `json` & `urllib.parse` (API Serialization & Routing)
   - `unittest` (Automated backend verification)
-- **Database:** SQLite 3 (`village_system.db`).
-- **External Dependencies:** **ZERO (`0`) external pip dependencies required.**
+- **Database:** SQLite 3 locally; MySQL 8+ for persistent Vercel deployments.
+- **External Dependencies:** MySQL driver is only needed for MySQL deployments.
 
 ---
 
@@ -64,7 +65,8 @@ The **Village Resources and Grievance Management System (GramSeva)** is a digita
 Village_Resource_Grievance_System/
 │
 ├── server.py                   # Multi-threaded HTTP Server & REST API Dispatcher
-├── database.py                 # SQLite database query and persistence layer
+├── database.py                 # SQLite/MySQL query layer and PBKDF2 auth
+├── migrate_to_mysql.py         # Non-destructive SQLite-to-MySQL migration
 ├── config.py                   # System constants, ports, and priority rankings
 ├── requirements.txt            # Zero-dependency specification file
 ├── README.md                   # Complete documentation and setup guide
@@ -125,7 +127,8 @@ A major component of this capstone is the explicit implementation and backend ut
 
 ## 🗄️ 6. Database Schema Design
 
-The SQLite database comprises 6 relational tables with foreign keys and indexes:
+The application data uses six relational tables; an additional `sessions` table
+stores hashed login-token digests for serverless-safe sessions:
 
 1. **`users`**: Resident and administrator credentials. Passwords are encrypted using **PBKDF2-HMAC-SHA256** with unique salts.
    - `id`, `full_name`, `mobile` (UNIQUE), `email` (UNIQUE), `village`, `address`, `password_hash`, `role`, `created_at`.
@@ -209,7 +212,8 @@ HTTP handler can run as a Vercel Python function.
 2. Open [vercel.com](https://vercel.com) and select **Add New Project**.
 3. Import the GitHub repository.
 4. Keep the project root as the repository root.
-5. Configure administrator environment variables as described below, then deploy.
+5. Complete the persistent database setup below, set the server-side database
+   variables in Vercel, then deploy.
 
 ### Deploy with the Vercel CLI
 
@@ -220,18 +224,125 @@ vercel
 vercel --prod
 ```
 
-### Vercel limitations
+### Persistent MySQL on Vercel
 
-- SQLite defaults to `/tmp`, which is temporary storage on Vercel. Account, grievance,
-   and resource data can be lost when the serverless function is restarted or moved to
-   another instance. Vercel deployments requiring persistence must use an external
-   persistent database or a platform with a durable mounted volume; a local SQLite
-   file on Vercel is not durable.
-- On a server that provides a durable mounted volume, set `GRAMSEVA_DATABASE_PATH`
-   to a database file on that volume before running `python setup_database.py`.
-- Sessions are stored in memory and are not shared between function instances.
-- For production, use a hosted database such as PostgreSQL and store sessions in a
-  shared service such as Redis.
+Vercel functions cannot reach a MySQL server running on your laptop, and their
+`/tmp` filesystem is temporary. The Vercel adapter therefore rejects SQLite-only
+production configuration with HTTP 503 rather than creating a fresh database that
+looks like a successful deployment. Production login sessions are stored in MySQL;
+only a SHA-256 digest of each random session token is stored.
+
+**Recommended provider:** Aiven for MySQL, using a supported service plan with
+TLS, backups/retention appropriate for your data, and IP filtering. Availability,
+backup retention, and recovery guarantees depend on the selected plan; do not
+assume an always-on guarantee. See [Aiven's MySQL setup guide](https://aiven.io/docs/products/mysql/get-started).
+
+Vercel uses dynamic outbound IPs by default. Before enabling production access,
+check the project plan and region. Vercel Static IPs are available on Pro and
+Enterprise plans; Secure Compute with private networking is an Enterprise option.
+Restrict the database network rule to the Vercel egress IPs, require TLS, and use
+a dedicated database user. If your plan has no fixed/restricted egress, do not
+allow `0.0.0.0/0`; use an eligible Vercel network option or host the API and
+database in a network where private access is available. See [Vercel Static IPs](https://vercel.com/docs/networking/static-ips)
+and [Secure Compute](https://vercel.com/docs/networking/secure-compute).
+
+#### Back up and migrate SQLite data
+
+The migration script never deletes or overwrites source data and refuses to import
+into a target that already contains application records. First make a separate
+backup and validate it:
+
+```bash
+python3 - <<'PY'
+import sqlite3
+from pathlib import Path
+source = Path("village_system.db")
+backup = Path("village_system.pre-mysql.sqlite3")
+with sqlite3.connect(f"file:{source.resolve()}?mode=ro", uri=True) as original, sqlite3.connect(backup) as copy:
+    original.backup(copy)
+    assert copy.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    for (table,) in original.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    ):
+        original_count = original.execute(
+            f'SELECT COUNT(*) FROM "{table}"'
+        ).fetchone()
+        backup_count = copy.execute(
+            f'SELECT COUNT(*) FROM "{table}"'
+        ).fetchone()
+        assert original_count == backup_count
+print("Backup verified:", backup)
+PY
+```
+
+Install the project requirements and create an empty MySQL database. For local
+development and the one-time migration, create a private environment file from
+the template:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set the connection values below. The app loads this file
+automatically; it does not override variables already exported by your shell.
+Leave the MySQL values empty to continue using SQLite locally. Restart the app
+or migration command after changing `.env`.
+
+Configure the same values as **server-side** environment variables in Vercel
+Production (and Preview only if wanted); Vercel does not receive your local
+`.env` file:
+
+- `GRAMSEVA_DB_HOST`
+- `GRAMSEVA_DB_PORT` (defaults to `3306`)
+- `GRAMSEVA_DB_NAME`
+- `GRAMSEVA_DB_USER`
+- `GRAMSEVA_DB_PASSWORD`
+- `GRAMSEVA_DB_SSL_CA` (CA certificate PEM text or a readable certificate path)
+
+Use a migration account with schema/data privileges for the one-time import, then
+use a separate least-privilege runtime account in Vercel with only the required
+`SELECT`, `INSERT`, `UPDATE`, and `DELETE` permissions. Obtain the CA certificate
+from the provider. The backend verifies both the TLS certificate and server name.
+Do not put these values in frontend files, source control, or a committed `.env`.
+The repository ignores `.env`; commit only `.env.example`.
+
+After making and validating the backup, run a read-only count check:
+
+```bash
+python migrate_to_mysql.py --source /absolute/path/to/village_system.pre-mysql.sqlite3
+```
+
+Review the counts, confirm the MySQL target is empty, then explicitly apply:
+
+```bash
+python migrate_to_mysql.py --source /absolute/path/to/village_system.pre-mysql.sqlite3 --apply
+```
+
+The importer creates the MySQL schema, preserves IDs, account roles, password
+hashes, grievances, resources, departments, announcements, and update timelines.
+It compares per-table row counts and content fingerprints before committing and
+reports only counts/results (not personal records or password hashes). Keep the
+SQLite source and backup unchanged until you have independently checked the
+production site and database. Never point the importer at a non-empty target.
+
+#### Vercel deployment
+
+1. Create the managed MySQL service and database; configure TLS and network
+    restrictions before importing.
+2. Enable Vercel Static IPs or Secure Compute if needed, then allowlist only the
+    applicable outbound addresses at the database provider.
+3. Back up and migrate from the SQLite source as above; verify all six application
+    tables and their imported records.
+4. In Vercel **Project → Settings → Environment Variables**, set the six
+    `GRAMSEVA_DB_*` names above as sensitive server-side values; do not use any
+    `NEXT_PUBLIC_`/frontend-exposed prefix.
+5. Redeploy. If configuration, TLS, network access, or required MySQL tables are
+    missing, the API logs a secret-free diagnostic and returns HTTP 503, rather
+    than silently using ephemeral SQLite.
+6. Test registration, email/User ID/mobile login, logout, both role dashboards,
+    grievance submission/tracking/status updates, resource administration, and
+    reports on the deployed site. Test mobile and desktop layouts, and confirm
+    registrations and submissions persist after a new deployment.
 
 ---
 
@@ -265,6 +376,10 @@ User IDs and case-insensitive email addresses. Back up `village_system.db` befor
 upgrading, then run `python setup_database.py` once; existing user and grievance
 records are retained. Set `GRAMSEVA_DATABASE_PATH` first if the database is not
 at the default project path.
+
+The application keeps the existing PBKDF2-HMAC-SHA256 format across registration
+and login. Public registrations always get the `villager` role, and login checks
+that the selected role matches the stored account role.
 
 ---
 

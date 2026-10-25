@@ -9,6 +9,10 @@ from pathlib import Path
 # Base directory of the project
 BASE_DIR = Path(__file__).resolve().parent
 
+from dotenv import load_dotenv
+
+load_dotenv(BASE_DIR / ".env", override=False)
+
 # Server settings
 HOST = "127.0.0.1"
 PORT = 8000
@@ -17,6 +21,61 @@ PORT = 8000
 DATABASE_PATH = Path(os.getenv("GRAMSEVA_DATABASE_PATH", str(BASE_DIR / "village_system.db")))
 SCHEMA_PATH = BASE_DIR / "database" / "schema.sql"
 SEED_PATH = BASE_DIR / "database" / "seed.sql"
+MYSQL_ENV_NAMES = {
+    "host": "GRAMSEVA_DB_HOST",
+    "port": "GRAMSEVA_DB_PORT",
+    "database": "GRAMSEVA_DB_NAME",
+    "user": "GRAMSEVA_DB_USER",
+    "password": "GRAMSEVA_DB_PASSWORD",
+    "ssl_ca": "GRAMSEVA_DB_SSL_CA",
+}
+MYSQL_SETTINGS = {
+    key: (
+        os.getenv(env_name, "")
+        if key in ("password", "ssl_ca")
+        else os.getenv(env_name, "").strip()
+    )
+    for key, env_name in MYSQL_ENV_NAMES.items()
+}
+MYSQL_SETTINGS["port"] = MYSQL_SETTINGS["port"] or "3306"
+DATABASE_BACKEND = (
+    "mysql"
+    if any(
+        MYSQL_SETTINGS[key]
+        for key in ("host", "database", "user", "password", "ssl_ca")
+    )
+    else "sqlite"
+)
+IS_VERCEL = os.getenv("VERCEL", "").lower() == "1"
+
+
+def mysql_connection_settings() -> dict:
+    """Validate and return the server-only MySQL connection settings."""
+    required = ("host", "database", "user", "password", "ssl_ca")
+    missing = [
+        MYSQL_ENV_NAMES[key]
+        for key in required
+        if not MYSQL_SETTINGS[key]
+    ]
+    if missing:
+        raise RuntimeError(
+            "MySQL configuration is incomplete; set " + ", ".join(missing)
+        )
+    try:
+        port = int(MYSQL_SETTINGS["port"])
+    except ValueError as exc:
+        raise RuntimeError("GRAMSEVA_DB_PORT must be a valid TCP port.") from exc
+    if not 1 <= port <= 65535:
+        raise RuntimeError("GRAMSEVA_DB_PORT must be a valid TCP port.")
+
+    return {
+        "host": MYSQL_SETTINGS["host"],
+        "port": port,
+        "database": MYSQL_SETTINGS["database"],
+        "user": MYSQL_SETTINGS["user"],
+        "password": MYSQL_SETTINGS["password"],
+        "ssl_ca": MYSQL_SETTINGS["ssl_ca"],
+    }
 
 # Static / Frontend directories
 FRONTEND_DIR = BASE_DIR / "frontend"

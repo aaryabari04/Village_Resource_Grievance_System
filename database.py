@@ -7,22 +7,154 @@ import sqlite3
 import hashlib
 import secrets
 import hmac
+import tempfile
+import threading
+from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
+
+import config
 from config import DATABASE_PATH, PRIORITY_WEIGHTS
 
 PASSWORD_HASH_ITERATIONS = 600_000
 LEGACY_PASSWORD_HASH_ITERATIONS = 100_000
+_MYSQL_POOL = None
+_MYSQL_POOL_LOCK = threading.Lock()
+_MYSQL_CA_FILE = None
+
+
+def _mysql_pool():
+    """Create one small connection pool per warm serverless instance."""
+    global _MYSQL_POOL, _MYSQL_CA_FILE
+    if _MYSQL_POOL is None:
+        with _MYSQL_POOL_LOCK:
+            if _MYSQL_POOL is None:
+                from mysql.connector.pooling import MySQLConnectionPool
+
+                settings = config.mysql_connection_settings()
+                ca_value = settings.pop("ssl_ca")
+                if "-----BEGIN CERTIFICATE-----" in ca_value:
+                    ca_digest = hashlib.sha256(ca_value.encode("utf-8")).hexdigest()[:16]
+                    _MYSQL_CA_FILE = Path(tempfile.gettempdir()) / f"gramseva-mysql-ca-{ca_digest}.pem"
+                    if not _MYSQL_CA_FILE.exists():
+                        try:
+                            _MYSQL_CA_FILE.write_text(ca_value, encoding="utf-8")
+                            _MYSQL_CA_FILE.chmod(0o600)
+                        except FileExistsError:
+                            pass
+                    ca_path = str(_MYSQL_CA_FILE)
+                else:
+                    ca_path = str(Path(ca_value).expanduser())
+                    if not Path(ca_path).is_file():
+                        raise RuntimeError("GRAMSEVA_DB_SSL_CA must contain a CA certificate or a readable file path.")
+
+                _MYSQL_POOL = MySQLConnectionPool(
+                    pool_name="gramseva",
+                    pool_size=5,
+                    pool_reset_session=True,
+                    connection_timeout=10,
+                    ssl_ca=ca_path,
+                    ssl_verify_cert=True,
+                    ssl_verify_identity=True,
+                    **settings,
+                )
+    return _MYSQL_POOL
 
 
 def get_db_connection():
     """
-    Creates and returns a connection to the SQLite database.
-    Enables foreign keys and sets row_factory to sqlite3.Row for dict-like access.
+    Returns a pooled MySQL connection or a SQLite connection for local development.
     """
+    if config.DATABASE_BACKEND == "mysql":
+        return _mysql_pool().get_connection()
+
     conn = sqlite3.connect(DATABASE_PATH)
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.row_factory = sqlite3.Row
     return conn
+
+
+@contextmanager
+def _managed_connection():
+    conn = get_db_connection()
+    try:
+        yield conn
+    except Exception:
+        if config.DATABASE_BACKEND == "mysql":
+            conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def _execute(cursor, query: str, params: tuple = ()):
+    if config.DATABASE_BACKEND == "mysql":
+        query = query.replace("?", "%s")
+    return cursor.execute(query, params)
+
+
+def is_integrity_error(error: Exception) -> bool:
+    """Recognize uniqueness and foreign-key violations from either driver."""
+    if isinstance(error, sqlite3.IntegrityError):
+        return True
+    if config.DATABASE_BACKEND == "mysql":
+        from mysql.connector import IntegrityError
+        return isinstance(error, IntegrityError)
+    return False
+
+
+def check_connection() -> None:
+    """Fail explicitly when MySQL or the migrated application schema is unavailable."""
+    with _managed_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        if config.DATABASE_BACKEND == "mysql":
+            for table in (
+                "users",
+                "departments",
+                "resources",
+                "announcements",
+                "grievances",
+                "grievance_updates",
+                "sessions",
+            ):
+                cursor.execute(f"SELECT 1 FROM `{table}` LIMIT 0")
+                cursor.fetchall()
+
+
+def ensure_session_table() -> None:
+    """Apply the additive, non-destructive session-table change."""
+    if config.DATABASE_BACKEND == "mysql":
+        statement = """
+            CREATE TABLE IF NOT EXISTS sessions (
+                token_hash CHAR(64) NOT NULL PRIMARY KEY,
+                user_id BIGINT UNSIGNED NOT NULL,
+                expires_at BIGINT NOT NULL,
+                INDEX idx_sessions_user (user_id),
+                CONSTRAINT fk_sessions_user FOREIGN KEY (user_id)
+                    REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+    else:
+        statement = """
+            CREATE TABLE IF NOT EXISTS sessions (
+                token_hash TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """
+    with _managed_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(statement)
+        if config.DATABASE_BACKEND == "mysql":
+            conn.commit()
+        else:
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)"
+            )
+            conn.commit()
 
 
 # =====================================================================
@@ -77,38 +209,63 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 def query_all(query: str, params: tuple = ()) -> list:
     """Executes a SELECT query and returns a list of dictionaries."""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(query, params)
+    with _managed_connection() as conn:
+        cursor = conn.cursor(dictionary=True) if config.DATABASE_BACKEND == "mysql" else conn.cursor()
+        _execute(cursor, query, params)
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
 
 def query_one(query: str, params: tuple = ()) -> dict:
     """Executes a SELECT query and returns a single dictionary or None."""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(query, params)
+    with _managed_connection() as conn:
+        cursor = conn.cursor(dictionary=True) if config.DATABASE_BACKEND == "mysql" else conn.cursor()
+        _execute(cursor, query, params)
         row = cursor.fetchone()
         return dict(row) if row else None
 
 
 def execute_commit(query: str, params: tuple = ()) -> int:
     """Executes an INSERT/UPDATE/DELETE query and commits. Returns rowcount."""
-    with get_db_connection() as conn:
+    with _managed_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(query, params)
+        _execute(cursor, query, params)
         conn.commit()
         return cursor.rowcount
 
 
 def execute_insert(query: str, params: tuple = ()) -> int:
     """Executes an INSERT query and commits. Returns the lastrowid."""
-    with get_db_connection() as conn:
+    with _managed_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(query, params)
+        _execute(cursor, query, params)
         conn.commit()
         return cursor.lastrowid
+
+
+def create_session(token: str, user_id: int, expires_at: int) -> None:
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    execute_insert(
+        "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
+        (token_hash, user_id, expires_at),
+    )
+
+
+def get_session(token: str) -> dict:
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    session = query_one(
+        "SELECT user_id, expires_at FROM sessions WHERE token_hash = ?",
+        (token_hash,),
+    )
+    if session and int(session["expires_at"]) <= int(datetime.now().timestamp()):
+        delete_session(token)
+        return None
+    return session
+
+
+def delete_session(token: str) -> None:
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    execute_commit("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
 
 
 # =====================================================================
@@ -434,7 +591,7 @@ def delete_announcement(announcement_id: int) -> int:
 
 def get_admin_statistics() -> dict:
     """Computes high-level counts for dashboard summary."""
-    with get_db_connection() as conn:
+    with _managed_connection() as conn:
         cursor = conn.cursor()
         total_users = cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'villager'").fetchone()[0]
         total_grievances = cursor.execute("SELECT COUNT(*) FROM grievances").fetchone()[0]
@@ -459,7 +616,7 @@ def get_admin_statistics() -> dict:
 
 def get_admin_reports() -> dict:
     """Generates detailed aggregations for reports and charts."""
-    with get_db_connection() as conn:
+    with _managed_connection() as conn:
         cursor = conn.cursor()
 
         # By category

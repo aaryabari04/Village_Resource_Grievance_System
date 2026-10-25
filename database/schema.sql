@@ -78,6 +78,14 @@ CREATE TABLE IF NOT EXISTS grievance_updates (
     FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
+-- Serverless-safe login sessions; store only a hash of the browser token.
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Indexes for fast query performance
 CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
@@ -89,3 +97,4 @@ CREATE INDEX IF NOT EXISTS idx_grievances_status ON grievances(status);
 CREATE INDEX IF NOT EXISTS idx_grievances_priority ON grievances(priority);
 CREATE INDEX IF NOT EXISTS idx_grievances_dept ON grievances(department_id);
 CREATE INDEX IF NOT EXISTS idx_updates_grievance ON grievance_updates(grievance_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);

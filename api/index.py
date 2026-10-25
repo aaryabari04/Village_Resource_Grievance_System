@@ -1,14 +1,11 @@
 """Vercel entry point for the GramSeva application.
 
-This adapter lets the existing standard-library HTTP handler run as a WSGI app.
-The application still uses SQLite and in-memory sessions, so this is intended for
-academic demos and small evaluations rather than durable production workloads.
+This adapter lets the existing standard-library HTTP handler run as a WSGI app
+with a persistent MySQL database configured through server-side environment variables.
 """
 
 import io
-import os
 import sys
-import tempfile
 from http.client import responses
 from pathlib import Path
 
@@ -17,16 +14,10 @@ sys.path.insert(0, str(BASE_DIR))
 
 import config
 
-# Vercel functions cannot write to the project directory. The default /tmp
-# database is ephemeral; deployments must configure a durable database backend.
-config.DATABASE_PATH = Path(
-    os.environ.get(
-        "GRAMSEVA_DATABASE_PATH",
-        str(Path(tempfile.gettempdir()) / "gramseva-village-system.db"),
-    )
-)
-
 import server
+import database
+
+_DATABASE_INITIALIZED = False
 
 
 class VercelVillageAppHandler(server.VillageAppHandler):
@@ -98,16 +89,51 @@ class WSGIHandler:
 
 
 def ensure_database():
-    if not config.DATABASE_PATH.exists():
-        from setup_database import init_database
-        init_database()
+    global _DATABASE_INITIALIZED
+    if _DATABASE_INITIALIZED:
+        return
+    if config.IS_VERCEL and config.DATABASE_BACKEND != "mysql":
+        raise RuntimeError("A persistent MySQL database must be configured for Vercel.")
+    if config.DATABASE_BACKEND == "mysql":
+        database.check_connection()
+    else:
+        if not config.DATABASE_PATH.exists():
+            from setup_database import init_database
+            init_database()
+        database.ensure_session_table()
+    _DATABASE_INITIALIZED = True
+
+
+def finish_response(request, start_response):
+    body = request.wfile.getvalue()
+    headers = list(request.response_headers)
+    if not any(key.lower() == "content-length" for key, _ in headers):
+        headers.append(("Content-Length", str(len(body))))
+    reason = responses.get(request.status, "")
+    start_response(f"{request.status} {reason}", headers)
+    return [body]
 
 
 def app(environ, start_response):
-    ensure_database()
     request = WSGIHandler(environ)
     handler = object.__new__(VercelVillageAppHandler)
     handler.__dict__.update(request.__dict__)
+
+    try:
+        ensure_database()
+    except Exception as exc:
+        code = getattr(exc, "errno", None)
+        suffix = f" code={code}" if isinstance(code, int) else ""
+        diagnostic = f" diagnostic={exc}" if isinstance(exc, RuntimeError) else ""
+        print(
+            f"[DB] startup check failed: error_type={type(exc).__name__}{suffix}{diagnostic}",
+            file=sys.stderr,
+        )
+        handler.send_error_json(
+            "Service temporarily unavailable. Please try again later.",
+            status=503,
+        )
+        return finish_response(handler, start_response)
 
     method = request.command.upper()
     if method == "GET":
@@ -123,10 +149,4 @@ def app(environ, start_response):
     else:
         handler.send_error_json("Method Not Allowed", status=405)
 
-    body = request.wfile.getvalue()
-    headers = list(request.response_headers)
-    if not any(key.lower() == "content-length" for key, _ in headers):
-        headers.append(("Content-Length", str(len(body))))
-    reason = responses.get(request.status, "")
-    start_response(f"{request.status} {reason}", headers)
-    return [body]
+    return finish_response(handler, start_response)

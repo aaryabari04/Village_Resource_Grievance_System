@@ -9,6 +9,12 @@ __pycache__/
 venv/
 env/
 
+# Environment secrets
+.env
+.env.*
+!.env.example
+*.pem
+
 # Local database files
 *.db
 village_system.db

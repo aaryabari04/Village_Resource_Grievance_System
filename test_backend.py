@@ -16,6 +16,8 @@ import sys
 import unittest
 import sqlite3
 import hashlib
+import time
+import json
 from pathlib import Path
 
 # Add project root to path
@@ -103,6 +105,43 @@ class TestVillageSystem(unittest.TestCase):
             "sha256", raw_password.encode("utf-8"), legacy_salt.encode("utf-8"), 100_000
         ).hex()
         self.assertTrue(database.verify_password(raw_password, f"{legacy_salt}${legacy_hash}"))
+
+    def test_database_backed_sessions_and_expiration(self):
+        """Sessions remain readable across handlers and expired tokens are rejected."""
+        token = "session-test-token"
+        expired_token = "expired-session-test-token"
+        user = database.get_user_by_login("ramesh")
+        self.assertIsNotNone(user)
+        self.addCleanup(database.delete_session, token)
+        self.addCleanup(database.delete_session, expired_token)
+
+        database.create_session(token, user["id"], int(time.time()) + 60)
+        database.create_session(expired_token, user["id"], int(time.time()) - 1)
+
+        self.assertEqual(database.get_session(token)["user_id"], user["id"])
+        self.assertIsNone(database.get_session(expired_token))
+        stored = database.query_one("SELECT token_hash FROM sessions WHERE user_id = ?", (user["id"],))
+        self.assertNotEqual(stored["token_hash"], token)
+
+    def test_vercel_wsgi_preserves_api_http_status(self):
+        """The WSGI adapter must return the status selected by the API handler."""
+        from api.index import VercelVillageAppHandler, WSGIHandler, finish_response
+
+        request = WSGIHandler({"PATH_INFO": "/api/login", "REQUEST_METHOD": "POST"})
+        handler = object.__new__(VercelVillageAppHandler)
+        handler.__dict__.update(request.__dict__)
+        handler.send_error_json("Invalid credentials.", status=401)
+
+        response = {}
+        body = b"".join(
+            finish_response(
+                handler,
+                lambda status, headers: response.update(status=status, headers=headers),
+            )
+        )
+
+        self.assertEqual(response["status"], "401 Unauthorized")
+        self.assertEqual(json.loads(body)["status"], 401)
 
     def test_legacy_user_schema_migration_preserves_users(self):
         from setup_database import migrate_user_schema

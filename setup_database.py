@@ -142,6 +142,10 @@ def seed_configured_admin():
 
 def init_database():
     """Initializes the database schema and seeds initial departments/resources/announcements."""
+    if config.DATABASE_BACKEND != "sqlite":
+        raise RuntimeError(
+            "setup_database.py initializes local SQLite only; use migrate_to_mysql.py for MySQL."
+        )
     print("=" * 60)
     print("Initializing Village Resources & Grievance Management Database")
     print(f"Database File: {DATABASE_PATH}")
