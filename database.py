@@ -157,6 +157,42 @@ def ensure_session_table() -> None:
             conn.commit()
 
 
+def ensure_user_role_schema() -> None:
+    """Add a villager-only default role when missing and canonicalize known roles."""
+    if config.DATABASE_BACKEND == "mysql":
+        columns = query_all("SHOW COLUMNS FROM users")
+        has_role = any(column["Field"] == "role" for column in columns)
+        role_difference = "BINARY role <> BINARY LOWER(TRIM(role))"
+        if not has_role:
+            try:
+                execute_commit(
+                    "ALTER TABLE users ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'villager'"
+                )
+            except Exception as exc:
+                # Multiple serverless instances may race to apply this additive migration.
+                if getattr(exc, "errno", None) != 1060:
+                    raise
+    else:
+        columns = query_all("PRAGMA table_info(users)")
+        has_role = any(column["name"] == "role" for column in columns)
+        if not has_role:
+            execute_commit(
+                "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'villager'"
+            )
+        role_difference = "role <> LOWER(TRIM(role))"
+
+    execute_commit(
+        "UPDATE users SET role = LOWER(TRIM(role)) "
+        "WHERE LOWER(TRIM(role)) IN ('villager', 'admin') AND "
+        + role_difference
+    )
+
+
+def normalize_role(role: str) -> str:
+    """Return a canonical stored role, or an empty value for an invalid role."""
+    return role.strip().lower() if isinstance(role, str) else ""
+
+
 # =====================================================================
 # PASSWORD HASHING (PBKDF2-HMAC-SHA256 - Python Standard Library)
 # =====================================================================
@@ -275,6 +311,9 @@ def delete_session(token: str) -> None:
 def create_user(full_name: str, username: str, mobile: str, email: str, village: str,
                 address: str, password: str, role: str = "villager") -> int:
     """Creates a new user record with securely hashed password."""
+    role = normalize_role(role)
+    if role not in config.ROLES:
+        raise ValueError("A valid account role is required.")
     pw_hash = hash_password(password)
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sql = """
@@ -288,7 +327,10 @@ def create_user(full_name: str, username: str, mobile: str, email: str, village:
 def get_user_by_id(user_id: int) -> dict:
     """Fetches user record without password hash."""
     sql = "SELECT id, full_name, username, mobile, email, village, address, role, created_at FROM users WHERE id = ?"
-    return query_one(sql, (user_id,))
+    user = query_one(sql, (user_id,))
+    if user:
+        user["role"] = normalize_role(user["role"])
+    return user
 
 
 def get_user_by_login(identifier: str) -> dict:
@@ -297,7 +339,10 @@ def get_user_by_login(identifier: str) -> dict:
     """
     identifier_clean = identifier.strip().lower()
     sql = "SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ? OR mobile = ?"
-    return query_one(sql, (identifier_clean, identifier_clean, identifier.strip()))
+    user = query_one(sql, (identifier_clean, identifier_clean, identifier.strip()))
+    if user:
+        user["role"] = normalize_role(user["role"])
+    return user
 
 
 def get_all_users() -> list:

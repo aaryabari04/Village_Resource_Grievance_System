@@ -164,6 +164,16 @@ class VillageAppHandler(BaseHTTPRequestHandler):
         try:
             if path.startswith("/api/"):
                 self.handle_api_get(path, query_params)
+            elif path in ("/admin", "/admin.html"):
+                user = self.get_current_user()
+                if not user or user["role"] != "admin":
+                    self.send_response(302)
+                    self.send_header("Location", "/login.html")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                self.handle_static_files(path)
             else:
                 self.handle_static_files(path)
         except Exception as e:
@@ -602,11 +612,38 @@ class VillageAppHandler(BaseHTTPRequestHandler):
             identifier = identifier.strip()
             requested_role = requested_role.strip().lower()
 
-            if not identifier or not password:
-                self.send_error_json("Please provide your email, User ID, or mobile number and password.", status=400)
-                return
             if requested_role not in ("villager", "admin"):
                 self.send_error_json("Please select a valid account type.", status=400)
+                return
+            if requested_role == "admin":
+                admin_email_pattern = (
+                    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+                    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+                    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+"
+                )
+                if (
+                    not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{2,29}", config.ADMIN_USERNAME)
+                    or len(config.ADMIN_PASSWORD) < 16
+                    or not re.fullmatch(admin_email_pattern, config.ADMIN_EMAIL)
+                ):
+                    self.send_error_json(
+                        "Administrator login is not configured. Set a valid ADMIN_USERNAME, ADMIN_EMAIL, and strong ADMIN_PASSWORD of at least 16 characters.",
+                        status=503,
+                    )
+                    return
+                if not secrets.compare_digest(password, config.ADMIN_PASSWORD):
+                    print("[AUTH] login rejected: reason=admin_environment_password_mismatch", file=sys.stderr)
+                    self.send_error_json("Invalid credentials. Please verify your login ID and password.", status=401)
+                    return
+                identifier = config.ADMIN_USERNAME
+            elif not identifier:
+                self.send_error_json(
+                    "Please provide your email, User ID, or mobile number and password.",
+                    status=400,
+                )
+                return
+            if not password:
+                self.send_error_json("Please provide your email, User ID, or mobile number and password.", status=400)
                 return
 
             account = database.get_user_by_login(identifier)
@@ -614,9 +651,17 @@ class VillageAppHandler(BaseHTTPRequestHandler):
                 print("[AUTH] login rejected: reason=account_not_found", file=sys.stderr)
                 self.send_error_json("Invalid credentials. Please verify your login ID and password.", status=401)
                 return
+            if requested_role == "admin" and account["email"].strip().lower() != config.ADMIN_EMAIL:
+                print("[AUTH] login rejected: reason=admin_email_mismatch", file=sys.stderr)
+                self.send_error_json("Invalid credentials. Please verify your login ID and password.", status=401)
+                return
             if not database.verify_password(password, account["password_hash"]):
                 print("[AUTH] login rejected: reason=password_verification_failed", file=sys.stderr)
                 self.send_error_json("Invalid credentials. Please verify your login ID and password.", status=401)
+                return
+
+            if account["role"] not in config.ROLES:
+                self.send_error_json("This account has an invalid role. Please contact an administrator.", status=403)
                 return
 
             if requested_role != account["role"]:
@@ -985,12 +1030,14 @@ def app(environ, start_response):
 def run_server(host: str = config.HOST, port: int = config.PORT):
     """Starts the threaded HTTP server."""
     if config.DATABASE_BACKEND == "mysql":
+        database.ensure_user_role_schema()
         database.check_connection()
     elif not config.DATABASE_PATH.exists():
         print("[!] Database file not found. Auto-running database initialization...")
         from setup_database import init_database
         init_database()
     else:
+        database.ensure_user_role_schema()
         database.ensure_session_table()
 
     server_address = (host, port)

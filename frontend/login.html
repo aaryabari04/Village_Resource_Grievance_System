@@ -60,7 +60,7 @@
       <form id="login-form">
         <input type="hidden" id="role-input" value="villager">
 
-        <div class="form-group">
+        <div class="form-group" id="login-identifier-group">
           <label class="form-label" for="login-identifier">Email Address, User ID, or Mobile Number</label>
           <input type="text" id="login-identifier" class="form-control" placeholder="Enter your email, User ID, or 10-digit mobile" required autofocus autocomplete="username">
           <div class="form-help">Use the email address, User ID, or 10-digit mobile number registered to your account.</div>
@@ -78,7 +78,7 @@
         </button>
       </form>
 
-      <div style="text-align: center; margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+      <div id="villager-register-link" style="text-align: center; margin-top: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
         Don't have an account yet? <a href="register.html" style="font-weight:600;">Register as Villager</a>
       </div>
 
@@ -95,8 +95,14 @@
 
       const villagerBtn = document.getElementById("role-villager-btn");
       const adminBtn = document.getElementById("role-admin-btn");
+      const identifierGroup = document.getElementById("login-identifier-group");
+      const identifierInput = document.getElementById("login-identifier");
+      const registrationLink = document.getElementById("villager-register-link");
 
       if (role === "villager") {
+        identifierGroup.hidden = false;
+        identifierInput.required = true;
+        registrationLink.hidden = false;
         villagerBtn.style.background = "var(--surface)";
         villagerBtn.style.boxShadow = "var(--shadow-sm)";
         villagerBtn.style.color = "var(--text-main)";
@@ -107,6 +113,10 @@
         adminBtn.style.background = "var(--surface)";
         adminBtn.style.boxShadow = "var(--shadow-sm)";
         adminBtn.style.color = "var(--text-main)";
+        identifierGroup.hidden = true;
+        identifierInput.required = false;
+        identifierInput.value = "";
+        registrationLink.hidden = true;
         villagerBtn.style.background = "transparent";
         villagerBtn.style.boxShadow = "none";
         villagerBtn.style.color = "var(--text-muted)";

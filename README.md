@@ -353,33 +353,61 @@ requires a unique User ID, email address, and 10-digit mobile number. New
 registrations always receive the `villager` role; the role selector on the login
 page does not grant privileges.
 
-Administrator accounts are not created by public registration. Configure all
-of the following environment variables before running `python setup_database.py`
-to create an initial administrator or rotate the configured administrator in an
-existing database:
+Administrator accounts are not created by public registration. For runtime
+administrator login, configure these server-side environment variables:
 
-- `GRAMSEVA_ADMIN_USERNAME`
-- `GRAMSEVA_ADMIN_NAME`
-- `GRAMSEVA_ADMIN_EMAIL`
-- `GRAMSEVA_ADMIN_MOBILE`
-- `GRAMSEVA_ADMIN_PASSWORD` (at least 8 characters)
+- `ADMIN_USERNAME` (defaults to `admin`; username of the existing administrator)
+- `ADMIN_EMAIL` (new email address to assign to the existing administrator)
+- `ADMIN_PASSWORD` (required in production; use a strong, unique password of at
+  least 16 characters)
 
-Supply the administrator password through the deployment's secret manager; do
-not put it in source control or frontend code. Existing administrator records in
-an older database are retained; when the configured username, email, and mobile
-identify an existing administrator, setup updates that account's profile and
-password hash from the configured values. Existing sample villager records
-remain only as sample data; they are not required for public registration.
+Keep `ADMIN_PASSWORD` in the local `.env` and Vercel's server-side environment
+variables/secret store; never put it in source control or frontend code. To set
+up credentials for the existing administrator in the configured persistent
+MySQL database, set the three values above in local `.env` and run:
 
-The migration adds User IDs to existing accounts and creates unique indexes for
-User IDs and case-insensitive email addresses. Back up `village_system.db` before
-upgrading, then run `python setup_database.py` once; existing user and grievance
-records are retained. Set `GRAMSEVA_DATABASE_PATH` first if the database is not
-at the default project path.
+```bash
+python3 setup_admin.py
+```
+
+This explicit operator command requires MySQL, finds the configured username,
+refuses to change anything unless that existing row already has the `admin`
+role, checks the new email is not used by another account, then updates only
+that account's email and password hash. It does not create an account, promote
+a villager, or alter grievances/resources. Vercel runtime login uses
+`ADMIN_USERNAME`, ignores client-supplied identifiers, checks the submitted
+password against `ADMIN_PASSWORD` and the stored hash, and requires the
+configured email and the account's database role to match. Neither environment
+value is sent to the browser. If configuration is missing or invalid,
+administrator login fails closed. The setup script's separate optional local
+SQLite bootstrap values use the `GRAMSEVA_ADMIN_*` names and do not provision an
+administrator in Vercel MySQL.
+The administrator HTML page redirects to login unless a valid admin session is
+present; administrator APIs independently check the database role on every
+request.
+
+`setup_database.py` is SQLite-only and refuses to initialize MySQL; it does not
+provision an administrator in the Vercel database. On SQLite, if the configured
+bootstrap identifiers match an existing administrator, the script updates that
+account's profile and password hash, so do not run it to recover or rotate an
+account unless that change is intended. Existing sample villager records remain
+only as sample data; they are not required for public registration.
+
+The SQLite migration adds User IDs to existing accounts and creates unique
+indexes for User IDs and case-insensitive email addresses. Back up
+`village_system.db` before upgrading, then run `python setup_database.py` once;
+existing user and grievance records are retained. Set
+`GRAMSEVA_DATABASE_PATH` first if the database is not at the default project
+path. The application also applies an additive role migration at startup:
+missing role columns default existing accounts to `villager`, and recognized
+`villager`/`admin` values are normalized before role checks. It never promotes
+an account or changes an unrecognized role value.
 
 The application keeps the existing PBKDF2-HMAC-SHA256 format across registration
-and login. Public registrations always get the `villager` role, and login checks
-that the selected role matches the stored account role.
+and login. Public registrations always get the `villager` role, and the server
+checks the selected role against the canonical database role on every login.
+Administrator APIs also load the current role from the database for every
+request; a page-level role check is not treated as authorization.
 
 ---
 

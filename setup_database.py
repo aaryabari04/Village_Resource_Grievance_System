@@ -30,6 +30,10 @@ def migrate_user_schema(conn):
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
     if "username" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN username TEXT COLLATE NOCASE")
+    if "role" not in columns:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'villager'"
+        )
 
     usernames = set()
     for row in conn.execute("SELECT id, username, email FROM users ORDER BY id").fetchall():
@@ -51,6 +55,11 @@ def migrate_user_schema(conn):
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email COLLATE NOCASE) "
         "WHERE email IS NOT NULL"
+    )
+    conn.execute(
+        "UPDATE users SET role = LOWER(TRIM(role)) "
+        "WHERE LOWER(TRIM(role)) IN ('villager', 'admin') "
+        "AND role <> LOWER(TRIM(role))"
     )
     conn.executescript("""
         CREATE TRIGGER IF NOT EXISTS users_require_username_insert
@@ -84,30 +93,34 @@ def migrate_user_schema(conn):
 def seed_configured_admin():
     """Create an administrator only when credentials are explicitly configured."""
     required = (
-        config.ADMIN_USERNAME,
-        config.ADMIN_NAME,
-        config.ADMIN_EMAIL,
-        config.ADMIN_MOBILE,
-        config.ADMIN_PASSWORD,
+        config.ADMIN_BOOTSTRAP_USERNAME,
+        config.ADMIN_BOOTSTRAP_NAME,
+        config.ADMIN_BOOTSTRAP_EMAIL,
+        config.ADMIN_BOOTSTRAP_MOBILE,
+        config.ADMIN_BOOTSTRAP_PASSWORD,
     )
     if not any(required):
         return
     if not all(required):
         raise ValueError("All GRAMSEVA_ADMIN_* settings are required to bootstrap an administrator.")
     if (
-        not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{2,29}", config.ADMIN_USERNAME)
+        not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{2,29}", config.ADMIN_BOOTSTRAP_USERNAME)
         or not re.fullmatch(
             r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
             r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+",
-            config.ADMIN_EMAIL,
+            config.ADMIN_BOOTSTRAP_EMAIL,
         )
-        or not re.fullmatch(r"[0-9]{10}", config.ADMIN_MOBILE)
-        or len(config.ADMIN_PASSWORD) < 8
+        or not re.fullmatch(r"[0-9]{10}", config.ADMIN_BOOTSTRAP_MOBILE)
+        or len(config.ADMIN_BOOTSTRAP_PASSWORD) < 8
     ):
         raise ValueError("Configured administrator username, mobile, or password is invalid.")
     existing = query_all(
         "SELECT id, role FROM users WHERE username = ? OR email = ? OR mobile = ?",
-        (config.ADMIN_USERNAME.lower(), config.ADMIN_EMAIL, config.ADMIN_MOBILE),
+        (
+            config.ADMIN_BOOTSTRAP_USERNAME.lower(),
+            config.ADMIN_BOOTSTRAP_EMAIL,
+            config.ADMIN_BOOTSTRAP_MOBILE,
+        ),
     )
     if any(user["role"] != "admin" for user in existing) or len(existing) > 1:
         raise ValueError("Administrator configuration conflicts with an existing villager account.")
@@ -119,23 +132,23 @@ def seed_configured_admin():
             WHERE id = ?
             """,
             (
-                config.ADMIN_NAME,
-                config.ADMIN_USERNAME.lower(),
-                config.ADMIN_MOBILE,
-                config.ADMIN_EMAIL,
-                hash_password(config.ADMIN_PASSWORD),
+                config.ADMIN_BOOTSTRAP_NAME,
+                config.ADMIN_BOOTSTRAP_USERNAME.lower(),
+                config.ADMIN_BOOTSTRAP_MOBILE,
+                config.ADMIN_BOOTSTRAP_EMAIL,
+                hash_password(config.ADMIN_BOOTSTRAP_PASSWORD),
                 existing[0]["id"],
             ),
         )
     else:
         create_user(
-            full_name=config.ADMIN_NAME,
-            username=config.ADMIN_USERNAME,
-            mobile=config.ADMIN_MOBILE,
-            email=config.ADMIN_EMAIL,
+            full_name=config.ADMIN_BOOTSTRAP_NAME,
+            username=config.ADMIN_BOOTSTRAP_USERNAME,
+            mobile=config.ADMIN_BOOTSTRAP_MOBILE,
+            email=config.ADMIN_BOOTSTRAP_EMAIL,
             village="Sundarpur",
             address="Gram Panchayat Office",
-            password=config.ADMIN_PASSWORD,
+            password=config.ADMIN_BOOTSTRAP_PASSWORD,
             role="admin",
         )
 

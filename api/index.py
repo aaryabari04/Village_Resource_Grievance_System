@@ -95,11 +95,13 @@ def ensure_database():
     if config.IS_VERCEL and config.DATABASE_BACKEND != "mysql":
         raise RuntimeError("A persistent MySQL database must be configured for Vercel.")
     if config.DATABASE_BACKEND == "mysql":
+        database.ensure_user_role_schema()
         database.check_connection()
     else:
         if not config.DATABASE_PATH.exists():
             from setup_database import init_database
             init_database()
+        database.ensure_user_role_schema()
         database.ensure_session_table()
     _DATABASE_INITIALIZED = True
 

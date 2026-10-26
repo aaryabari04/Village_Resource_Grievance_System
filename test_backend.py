@@ -18,6 +18,8 @@ import sqlite3
 import hashlib
 import time
 import json
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 # Add project root to path
@@ -42,6 +44,12 @@ class CapturedAPIHandler(server.VillageAppHandler):
     """Run API routes directly and retain their JSON response for assertions."""
 
     def get_current_user(self):
+        if hasattr(self, "current_user"):
+            return self.current_user
+        token = self.get_session_token()
+        session = database.get_session(token) if token else None
+        if session:
+            return database.get_user_by_id(session["user_id"])
         return None
 
     def get_session_token(self):
@@ -188,6 +196,61 @@ class TestVillageSystem(unittest.TestCase):
             )
         conn.close()
 
+    def test_user_role_migration_defaults_and_normalizes_without_promotion(self):
+        previous_backend = config.DATABASE_BACKEND
+        previous_database_path = database.DATABASE_PATH
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                config.DATABASE_BACKEND = "sqlite"
+                database.DATABASE_PATH = Path(temp_dir) / "legacy-users.db"
+                conn = database.get_db_connection()
+                conn.execute(
+                    "CREATE TABLE users (id INTEGER PRIMARY KEY, full_name TEXT NOT NULL)"
+                )
+                conn.execute(
+                    "INSERT INTO users (id, full_name) VALUES (41, 'Legacy Resident')"
+                )
+                conn.commit()
+                conn.close()
+
+                database.ensure_user_role_schema()
+                user = database.query_one(
+                    "SELECT id, full_name, role FROM users WHERE id = ?", (41,)
+                )
+                self.assertEqual(user, {
+                    "id": 41,
+                    "full_name": "Legacy Resident",
+                    "role": "villager",
+                })
+
+                database.execute_commit(
+                    "UPDATE users SET role = ? WHERE id = ?", (" ADMIN ", 41)
+                )
+                database.ensure_user_role_schema()
+                self.assertEqual(
+                    database.query_one("SELECT role FROM users WHERE id = 41")["role"],
+                    "admin",
+                )
+        finally:
+            config.DATABASE_BACKEND = previous_backend
+            database.DATABASE_PATH = previous_database_path
+
+    def test_mysql_role_migration_when_role_column_already_exists(self):
+        previous_backend = config.DATABASE_BACKEND
+        try:
+            config.DATABASE_BACKEND = "mysql"
+            with patch.object(
+                database, "query_all", return_value=[{"Field": "role"}]
+            ), patch.object(database, "execute_commit") as execute_commit:
+                database.ensure_user_role_schema()
+            execute_commit.assert_called_once_with(
+                "UPDATE users SET role = LOWER(TRIM(role)) "
+                "WHERE LOWER(TRIM(role)) IN ('villager', 'admin') AND "
+                "BINARY role <> BINARY LOWER(TRIM(role))"
+            )
+        finally:
+            config.DATABASE_BACKEND = previous_backend
+
     # =================================================================
     # 2. USER AUTHENTICATION & REGISTRATION
     # =================================================================
@@ -257,6 +320,12 @@ class TestVillageSystem(unittest.TestCase):
             )
 
     def test_registration_login_validation_and_admin_separation(self):
+        previous_admin_username = config.ADMIN_USERNAME
+        previous_admin_email = config.ADMIN_EMAIL
+        previous_admin_password = config.ADMIN_PASSWORD
+        self.addCleanup(setattr, config, "ADMIN_USERNAME", previous_admin_username)
+        self.addCleanup(setattr, config, "ADMIN_EMAIL", previous_admin_email)
+        self.addCleanup(setattr, config, "ADMIN_PASSWORD", previous_admin_password)
         username = "api_new_villager"
         email = "api.new.villager@example.com"
         mobile = "9198765432"
@@ -307,12 +376,15 @@ class TestVillageSystem(unittest.TestCase):
             )["status"],
             401,
         )
+        config.ADMIN_USERNAME = username
+        config.ADMIN_EMAIL = email
+        config.ADMIN_PASSWORD = password + "Extra"
         self.assertEqual(
             self.post_api(
                 "/api/login",
                 {"identifier": email, "password": password, "role": "admin"},
             )["status"],
-            403,
+            401,
         )
 
         for changed_field in ("username", "email", "mobile"):
@@ -343,18 +415,121 @@ class TestVillageSystem(unittest.TestCase):
             password=admin_password,
             role="admin",
         )
+        config.ADMIN_USERNAME = ""
+        config.ADMIN_EMAIL = ""
+        config.ADMIN_PASSWORD = ""
+        self.assertEqual(
+            self.post_api(
+                "/api/login",
+                {"identifier": "", "password": admin_password, "role": "admin"},
+            )["status"],
+            503,
+        )
+        config.ADMIN_USERNAME = "invalid username!"
+        config.ADMIN_EMAIL = "api.test.admin@example.com"
+        config.ADMIN_PASSWORD = admin_password
+        self.assertEqual(
+            self.post_api(
+                "/api/login",
+                {"identifier": "", "password": admin_password, "role": "admin"},
+            )["status"],
+            503,
+        )
+        config.ADMIN_USERNAME = "api_test_admin"
+        config.ADMIN_EMAIL = "invalid-email"
+        config.ADMIN_PASSWORD = "short"
+        self.assertEqual(
+            self.post_api(
+                "/api/login",
+                {"identifier": "", "password": admin_password, "role": "admin"},
+            )["status"],
+            503,
+        )
+        config.ADMIN_EMAIL = "api.test.admin@example.com"
+        config.ADMIN_PASSWORD = admin_password
+        self.assertEqual(
+            self.post_api(
+                "/api/login",
+                {"identifier": "not-the-configured-admin", "password": "IncorrectAdminPassphrase42", "role": "admin"},
+            )["status"],
+            401,
+        )
         admin_login = self.post_api(
             "/api/login",
-            {"identifier": "api_test_admin", "password": admin_password, "role": "admin"},
+            {"identifier": "", "password": admin_password, "role": "admin"},
         )
         self.assertEqual(admin_login["status"], 200)
         self.assertEqual(admin_login["data"]["user"]["role"], "admin")
+        configured_admin_login = self.post_api(
+            "/api/login",
+            {
+                "identifier": "some-other-username",
+                "password": admin_password,
+                "role": "admin",
+            },
+        )
+        self.assertEqual(configured_admin_login["status"], 200)
+        self.assertEqual(configured_admin_login["data"]["user"]["role"], "admin")
+
+        unauthorized_admin_page = object.__new__(CapturedAPIHandler)
+        unauthorized_admin_page.path = "/admin.html"
+        unauthorized_admin_page.response_headers = []
+        unauthorized_admin_page.send_response = lambda status: setattr(
+            unauthorized_admin_page, "status", status
+        )
+        unauthorized_admin_page.send_header = lambda name, value: (
+            unauthorized_admin_page.response_headers.append((name, value))
+        )
+        unauthorized_admin_page.end_headers = lambda: None
+        with patch.object(unauthorized_admin_page, "handle_static_files") as serve_static:
+            unauthorized_admin_page.do_GET()
+        self.assertEqual(unauthorized_admin_page.status, 302)
+        self.assertIn(
+            ("Location", "/login.html"), unauthorized_admin_page.response_headers
+        )
+        serve_static.assert_not_called()
+
+        authorized_admin_page = object.__new__(CapturedAPIHandler)
+        authorized_admin_page.path = "/admin.html"
+        authorized_admin_page.session_token = admin_login["data"]["token"]
+        with patch.object(authorized_admin_page, "handle_static_files") as serve_static:
+            authorized_admin_page.do_GET()
+        serve_static.assert_called_once_with("/admin.html")
+
+        self.assertEqual(
+            self.post_api(
+                "/api/login",
+                {"identifier": "api_test_admin", "password": admin_password, "role": "villager"},
+            )["status"],
+            403,
+        )
+
+        admin_dashboard = object.__new__(CapturedAPIHandler)
+        admin_dashboard.session_token = admin_login["data"]["token"]
+        admin_dashboard.handle_api_get("/api/admin/statistics", {})
+        self.assertEqual(admin_dashboard.response["status"], 200)
+
+        villager_dashboard = object.__new__(CapturedAPIHandler)
+        villager_dashboard.session_token = login_responses[0]["data"]["token"]
+        villager_dashboard.handle_api_get("/api/admin/statistics", {})
+        self.assertEqual(villager_dashboard.response["status"], 403)
 
         for login_response in login_responses:
             logout_handler = object.__new__(CapturedAPIHandler)
             logout_handler.session_token = login_response["data"]["token"]
             logout_handler.handle_api_post("/api/logout", {})
             self.assertTrue(logout_handler.response["data"]["success"])
+            self.assertIsNone(database.get_session(login_response["data"]["token"]))
+
+        admin_logout = object.__new__(CapturedAPIHandler)
+        admin_logout.session_token = admin_login["data"]["token"]
+        admin_logout.handle_api_post("/api/logout", {})
+        self.assertTrue(admin_logout.response["data"]["success"])
+        self.assertIsNone(database.get_session(admin_login["data"]["token"]))
+        admin_dashboard_after_logout = object.__new__(CapturedAPIHandler)
+        admin_dashboard_after_logout.session_token = admin_login["data"]["token"]
+        admin_dashboard_after_logout.handle_api_get("/api/admin/statistics", {})
+        self.assertEqual(admin_dashboard_after_logout.response["status"], 403)
         self.assertIsNotNone(database.get_user_by_login(username))
         database.execute_commit("DELETE FROM users WHERE username IN (?, ?)", (username, "api_test_admin"))
 
@@ -362,11 +537,11 @@ class TestVillageSystem(unittest.TestCase):
         from setup_database import seed_configured_admin
 
         settings = (
-            "ADMIN_USERNAME",
-            "ADMIN_NAME",
-            "ADMIN_EMAIL",
-            "ADMIN_MOBILE",
-            "ADMIN_PASSWORD",
+            "ADMIN_BOOTSTRAP_USERNAME",
+            "ADMIN_BOOTSTRAP_NAME",
+            "ADMIN_BOOTSTRAP_EMAIL",
+            "ADMIN_BOOTSTRAP_MOBILE",
+            "ADMIN_BOOTSTRAP_PASSWORD",
         )
         previous_settings = {name: getattr(config, name) for name in settings}
 
@@ -392,17 +567,63 @@ class TestVillageSystem(unittest.TestCase):
             role="admin",
         )
 
-        config.ADMIN_USERNAME = "rotation_admin"
-        config.ADMIN_NAME = "Rotated Administrator"
-        config.ADMIN_EMAIL = "rotation.admin@example.com"
-        config.ADMIN_MOBILE = "9000000096"
-        config.ADMIN_PASSWORD = "NewAdminPassword42"
+        config.ADMIN_BOOTSTRAP_USERNAME = "rotation_admin"
+        config.ADMIN_BOOTSTRAP_NAME = "Rotated Administrator"
+        config.ADMIN_BOOTSTRAP_EMAIL = "rotation.admin@example.com"
+        config.ADMIN_BOOTSTRAP_MOBILE = "9000000096"
+        config.ADMIN_BOOTSTRAP_PASSWORD = "NewAdminPassword42"
         seed_configured_admin()
 
         admin = database.get_user_by_login("rotation_admin")
         self.assertEqual(admin["full_name"], "Rotated Administrator")
         self.assertTrue(database.verify_password("NewAdminPassword42", admin["password_hash"]))
         self.assertFalse(database.verify_password("OldAdminPassword42", admin["password_hash"]))
+
+    def test_production_admin_setup_changes_only_existing_admin_account(self):
+        import setup_admin
+
+        previous_settings = (
+            config.DATABASE_BACKEND,
+            config.ADMIN_USERNAME,
+            config.ADMIN_EMAIL,
+            config.ADMIN_PASSWORD,
+        )
+        self.addCleanup(
+            setattr, config, "DATABASE_BACKEND", previous_settings[0]
+        )
+        self.addCleanup(setattr, config, "ADMIN_USERNAME", previous_settings[1])
+        self.addCleanup(setattr, config, "ADMIN_EMAIL", previous_settings[2])
+        self.addCleanup(setattr, config, "ADMIN_PASSWORD", previous_settings[3])
+
+        config.DATABASE_BACKEND = "mysql"
+        config.ADMIN_USERNAME = "existing_admin"
+        config.ADMIN_EMAIL = "new.admin@example.com"
+        config.ADMIN_PASSWORD = "NewStrongAdminPassword42!"
+        account = {
+            "id": 27,
+            "role": "admin",
+            "email": "old.admin@example.com",
+        }
+        with patch.object(database, "get_user_by_login", return_value=account), patch.object(
+            database, "query_one", return_value=None
+        ), patch.object(database, "hash_password", return_value="new-hash") as hash_password, patch.object(
+            database, "execute_commit", return_value=1
+        ) as execute_commit:
+            setup_admin.configure_existing_admin()
+
+        hash_password.assert_called_once_with(config.ADMIN_PASSWORD)
+        execute_commit.assert_called_once_with(
+            "UPDATE users SET email = ?, password_hash = ? "
+            "WHERE id = ? AND role = 'admin'",
+            ("new.admin@example.com", "new-hash", 27),
+        )
+
+        with patch.object(database, "get_user_by_login", return_value={
+            "id": 28, "role": "villager", "email": "citizen@example.com"
+        }), patch.object(database, "execute_commit") as blocked_update:
+            with self.assertRaisesRegex(ValueError, "existing administrator"):
+                setup_admin.configure_existing_admin()
+        blocked_update.assert_not_called()
     # =================================================================
     # 3. RESOURCES & MULTI-ATTRIBUTE SEARCH
     # =================================================================
